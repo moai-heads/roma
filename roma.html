@@ -122,17 +122,6 @@ kbd{background:#3a2e1e;border:1px solid #6a5436;border-radius:3px;padding:0 4px;
  font-size:9px;padding:1px 0;cursor:pointer}
 .stat .trbtns button.on{background:#c8a04a;color:#1a1408}
 
-/* ================= intro ================= */
-#intro{position:fixed;inset:0;background:rgba(8,6,4,.93);z-index:50;display:flex;align-items:center;justify-content:center}
-#intro .card{max-width:700px;background:#1d160e;border:2px solid #57432a;border-radius:8px;padding:20px 26px}
-#intro h1{margin:0 0 2px;color:#f0d9a0;font-size:32px;letter-spacing:3px}
-#intro h2{margin:0 0 12px;color:#9c8f78;font-size:12px;font-weight:normal}
-#intro ul{padding-left:18px;margin:0;columns:2;column-gap:22px}
-#intro li{margin:4px 0;font-size:12px;line-height:1.45;break-inside:avoid}
-#intro button{margin-top:14px;background:#c8a04a;color:#1a1408;border:none;border-radius:4px;
- padding:9px 22px;font-size:15px;cursor:pointer;font-weight:bold}
-#intro b{color:#f0d9a0}
-
 </style></head><body>
 <div id="top"></div>
 <div id="stockpanel"><h4>Stockpile</h4><div id="res"></div></div>
@@ -151,22 +140,6 @@ kbd{background:#3a2e1e;border:1px solid #6a5436;border-radius:3px;padding:0 4px;
   <div id="dock"></div>
   <div id="docknote"><b>Site rules:</b> wheat needs 45% fertile soil, olives 60% &middot; clay pits, iron mines, potteries and smithies need a water radius &middot; <kbd>F</kbd> soil &middot; <kbd>C</kbd> chains &middot; <kbd>G</kbd> servant paths</div>
 </div>
-<div id="intro"><div class="card">
-<h1>ROMA</h1><h2>a Caesar III style city builder &middot; servant carts on real paths</h2>
-<ul>
-<li><b>Roads first.</b> A building needs a road touching its edge, and that road must reach the Marketplace.</li>
-<li><b>Servants path point-to-point.</b> A cart spawns at the market, runs <b>A* over the road network</b> to that
-    household's doorstep, delivers, then A*s back. Press <b>G</b> to see every route.</li>
-<li><b>Water is a radius, not a cargo.</b> <b>Well</b> = 6 tiles. <b>Cistern</b> = 12 but needs its own supply.
-    <b>Aqueduct</b> = 18 but must touch a well or cistern. Chain them to push water across the map.</li>
-<li><b>Clay needs water.</b> Clay pits, iron mines, potteries and smithies all stall without a water radius.
-    Woodcutters do not, and they slowly strip the soil around them.</li>
-<li><b>Soil matters.</b> Wheat needs 45% fertility, olives 60%. Press <b>F</b> for the overlay.</li>
-<li><b>Ladder:</b> food &rarr; pottery &rarr; tools &rarr; wine/luxury.
-    Tent &rarr; Hovel &rarr; Domus &rarr; Townhouse &rarr; Mansion.</li>
-</ul>
-<button onclick="document.getElementById('intro').style.display='none'">Found the colony</button>
-</div></div>
 <script>/**
  * @license
  * Copyright 2010-2023 Three.js Authors

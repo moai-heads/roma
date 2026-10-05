@@ -115,14 +115,3 @@ kbd{background:#3a2e1e;border:1px solid #6a5436;border-radius:3px;padding:0 4px;
 .stat .trbtns button{flex:1;background:#2e2418;color:#c8b898;border:1px solid #57432a;border-radius:2px;
  font-size:9px;padding:1px 0;cursor:pointer}
 .stat .trbtns button.on{background:#c8a04a;color:#1a1408}
-
-/* ================= intro ================= */
-#intro{position:fixed;inset:0;background:rgba(8,6,4,.93);z-index:50;display:flex;align-items:center;justify-content:center}
-#intro .card{max-width:700px;background:#1d160e;border:2px solid #57432a;border-radius:8px;padding:20px 26px}
-#intro h1{margin:0 0 2px;color:#f0d9a0;font-size:32px;letter-spacing:3px}
-#intro h2{margin:0 0 12px;color:#9c8f78;font-size:12px;font-weight:normal}
-#intro ul{padding-left:18px;margin:0;columns:2;column-gap:22px}
-#intro li{margin:4px 0;font-size:12px;line-height:1.45;break-inside:avoid}
-#intro button{margin-top:14px;background:#c8a04a;color:#1a1408;border:none;border-radius:4px;
- padding:9px 22px;font-size:15px;cursor:pointer;font-weight:bold}
-#intro b{color:#f0d9a0}

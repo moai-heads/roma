@@ -77,32 +77,34 @@ button{font-family:inherit}
 #help b{color:#f0d9a0}
 kbd{background:#3a2e1e;border:1px solid #6a5436;border-radius:3px;padding:0 4px;color:#f0d9a0}
 
-#ghostinfo{position:fixed;left:50%;transform:translateX(-50%);bottom:124px;min-width:300px;text-align:center;z-index:11;background:rgba(18,14,9,.92);
+#ghostinfo{display:none;position:fixed;left:50%;transform:translateX(-50%);bottom:124px;min-width:300px;text-align:center;z-index:11;background:rgba(18,14,9,.92);
  border:1px solid #57432a;border-radius:4px;padding:3px 12px;font-size:11.5px;color:#d8ceb8;pointer-events:none}
 
 /* ================= command GRID dock (AoE style) ================= */
 #bar{position:fixed;left:0;right:0;bottom:0;z-index:10;background:linear-gradient(#1a140d,#0d0a07);
  border-top:2px solid #4a3a22;padding:5px 8px}
-#dock{display:flex;flex-wrap:wrap;justify-content:center;gap:5px;align-items:flex-start;max-width:1560px;margin:0 auto}
-.group{background:rgba(28,21,13,.75);border:1px solid #43341f;border-radius:5px;padding:4px;
- flex:1 1 14%;min-width:212px;max-width:300px}
-.ghead{display:flex;justify-content:space-between;align-items:baseline;font-size:10px;letter-spacing:1.2px;
+/* one single row that scales down to fit -- never wraps into a second line */
+#dock{display:flex;flex-wrap:nowrap;justify-content:center;gap:4px;align-items:stretch;
+ width:100%;max-width:1560px;margin:0 auto;overflow-x:auto;scrollbar-width:thin}
+.group{background:rgba(28,21,13,.75);border:1px solid #43341f;border-radius:5px;padding:3px;
+ flex:1 1 0;min-width:0;max-width:none}
+.ghead{display:flex;justify-content:space-between;align-items:baseline;font-size:clamp(8px,.78vw,10px);letter-spacing:1.2px;
  text-transform:uppercase;padding:0 2px 4px;margin-bottom:4px;border-bottom:1px solid #43341f}
 .gsub{color:#7a6a4a;letter-spacing:0;text-transform:none;font-size:8.5px}
 .g-civic .ghead{color:#8fb0e8}.g-prod .ghead{color:#9cc87a}
 .g-ind .ghead{color:#e0a868}.g-res .ghead{color:#e884a4}.g-infra .ghead{color:#b0b0b0}
-.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}
+.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:3px}
 .card{background:#241b12;border:1px solid #43341f;border-top:2px solid #5a4630;border-radius:4px;
- padding:5px 4px 4px;cursor:pointer;text-align:center;line-height:1.15;overflow:hidden;
+ padding:3px 2px 3px;min-width:0;cursor:pointer;text-align:center;line-height:1.15;overflow:hidden;
  display:flex;flex-direction:column;align-items:center;justify-content:flex-start}
 .card:hover{background:#3f2f1e;transform:translateY(-1px)}
 .card.on{background:#c8a04a;border-color:#f0d9a0;color:#1a1408}
 .card.on .ccost{color:#4a3a10}
-.card .cic{font-size:19px;line-height:1.15;color:#e8dcc0}
+.card .cic{font-size:clamp(13px,1.35vw,19px);line-height:1.15;color:#e8dcc0}
 .card.on .cic{color:#2a2010}
-.cnm{font-size:9.5px;color:#d8ceb8;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.cnm{font-size:clamp(7.5px,.72vw,9.5px);color:#d8ceb8;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .card.on .cnm{color:#1a1408}
-.ccost{font-size:9.5px;color:#c8a04a;line-height:1.1}
+.ccost{font-size:clamp(7.5px,.72vw,9.5px);color:#c8a04a;line-height:1.1}
 .card.civic{border-top-color:#6a8ac8}.card.prod{border-top-color:#7aa85a}
 .card.ind{border-top-color:#c88a4a}.card.vice{border-top-color:#b04ac8}.card.law{border-top-color:#c85a5a}.card.res{border-top-color:#c85a7a}.card.infra{border-top-color:#8a8a8a}
 .card.poor{opacity:.5}
@@ -119,17 +121,6 @@ kbd{background:#3a2e1e;border:1px solid #6a5436;border-radius:3px;padding:0 4px;
 .stat .trbtns button{flex:1;background:#2e2418;color:#c8b898;border:1px solid #57432a;border-radius:2px;
  font-size:9px;padding:1px 0;cursor:pointer}
 .stat .trbtns button.on{background:#c8a04a;color:#1a1408}
-
-/* ================= intro ================= */
-#intro{position:fixed;inset:0;background:rgba(8,6,4,.93);z-index:50;display:flex;align-items:center;justify-content:center}
-#intro .card{max-width:700px;background:#1d160e;border:2px solid #57432a;border-radius:8px;padding:20px 26px}
-#intro h1{margin:0 0 2px;color:#f0d9a0;font-size:32px;letter-spacing:3px}
-#intro h2{margin:0 0 12px;color:#9c8f78;font-size:12px;font-weight:normal}
-#intro ul{padding-left:18px;margin:0;columns:2;column-gap:22px}
-#intro li{margin:4px 0;font-size:12px;line-height:1.45;break-inside:avoid}
-#intro button{margin-top:14px;background:#c8a04a;color:#1a1408;border:none;border-radius:4px;
- padding:9px 22px;font-size:15px;cursor:pointer;font-weight:bold}
-#intro b{color:#f0d9a0}
 
 </style></head><body>
 <div id="top"></div>
@@ -149,22 +140,6 @@ kbd{background:#3a2e1e;border:1px solid #6a5436;border-radius:3px;padding:0 4px;
   <div id="dock"></div>
   <div id="docknote"><b>Site rules:</b> wheat needs 45% fertile soil, olives 60% &middot; clay pits, iron mines, potteries and smithies need a water radius &middot; <kbd>F</kbd> soil &middot; <kbd>C</kbd> chains &middot; <kbd>G</kbd> servant paths</div>
 </div>
-<div id="intro"><div class="card">
-<h1>ROMA</h1><h2>a Caesar III style city builder &middot; servant carts on real paths</h2>
-<ul>
-<li><b>Roads first.</b> A building needs a road touching its edge, and that road must reach the Marketplace.</li>
-<li><b>Servants path point-to-point.</b> A cart spawns at the market, runs <b>A* over the road network</b> to that
-    household's doorstep, delivers, then A*s back. Press <b>G</b> to see every route.</li>
-<li><b>Water is a radius, not a cargo.</b> <b>Well</b> = 6 tiles. <b>Cistern</b> = 12 but needs its own supply.
-    <b>Aqueduct</b> = 18 but must touch a well or cistern. Chain them to push water across the map.</li>
-<li><b>Clay needs water.</b> Clay pits, iron mines, potteries and smithies all stall without a water radius.
-    Woodcutters do not, and they slowly strip the soil around them.</li>
-<li><b>Soil matters.</b> Wheat needs 45% fertility, olives 60%. Press <b>F</b> for the overlay.</li>
-<li><b>Ladder:</b> food &rarr; pottery &rarr; tools &rarr; wine/luxury.
-    Tent &rarr; Hovel &rarr; Domus &rarr; Townhouse &rarr; Mansion.</li>
-</ul>
-<button onclick="document.getElementById('intro').style.display='none'">Found the colony</button>
-</div></div>
 <script>/**
  * @license
  * Copyright 2010-2023 Three.js Authors
@@ -53725,13 +53700,19 @@ function buildingMesh(b){
       tileRoof(M('roof'),0.9,0.9,0.6,0.3);
       break; }
     case 'market': {
-      box(M('stone'),w*0.96,0.3,h*0.96,0,0.15,Z);
-      // peristyle: columns round an open courtyard
-      colonnade(M('marble'),0.16,2.1,4);
-      colonnade(M('marble'),0.16,2.1,4,h/2-0.45);
-      for(let i=0;i<4;i++) cyl(M('marble'),0.16,0.16,2.1,-w/2+0.45,1.05,-h/2+0.45+(h-0.9)*i/3,8);
-      for(let i=0;i<4;i++) cyl(M('marble'),0.16,0.16,2.1,w/2-0.45,1.05,-h/2+0.45+(h-0.9)*i/3,8);
-      flatRoof(M('roof2'),w*0.98,h*0.98,2.22);
+      box(M('stone'),w*0.96,0.3,h*0.96,0,0.15,Z).userData.isFooting=true;
+      // Peristyle. The row offset used to be Z-0.45 and h/2-0.45; once the model frame
+      // was re-centred on Z=0 those two landed at z=-0.45 and z=+1.55, so the whole
+      // colonnade sat off to one side. Both rows now use the same symmetric inset.
+      const mInset=0.45, mR=0.16, mYTop=2.1, mCx=w/2-mInset, mCz=h/2-mInset;
+      for(const sz of [-1,1]) for(let i=0;i<4;i++)
+        cyl(M('marble'),mR,mR,mYTop, -mCx+(2*mCx)*i/3, mYTop/2, sz*mCz, 8);
+      for(const sx of [-1,1]) for(let i=0;i<4;i++)
+        cyl(M('marble'),mR,mR,mYTop, sx*mCx, mYTop/2, -mCz+(2*mCz)*i/3, 8);
+      // entablature ring, then the flat roof over the whole peristyle
+      for(const sz of [-1,1]) box(M('cream'), w*0.94, 0.24, 0.34, 0, mYTop+0.12, sz*mCz);
+      for(const sx of [-1,1]) box(M('cream'), 0.34, 0.24, h*0.94, sx*mCx, mYTop+0.12, 0);
+      flatRoof(M('roof2'), w*1.02, h*1.02, mYTop+0.26);
       // stalls with awnings
       for(let i=0;i<3;i++){
         const x=(i-1)*w*0.28;
@@ -53779,18 +53760,37 @@ function buildingMesh(b){
       }
       break; }
     case 'temple': {
-      box(M('stone'),w*0.94,0.7,h*0.94,0,0.35,Z);
-      const cx2=X, cz2=Z-h/2+0.7;
-      for(let i=0;i<6;i++) cyl(M('marble'),0.2,0.22,2.6,cx2-w*0.34+w*0.68*i/5,2.0,cz2,10);
-      box(M('marble'),w*0.9,0.3,h*0.5,0,3.45,cz2);
-      flatRoof(M('roof2'),w*0.95,h*0.6,3.62);
-      // pediment
-      for(let i=0;i<6;i++){
-        const x=cx2-w*0.3+w*0.6*i/5, y=3.8+ (i===0||i===5?0:0.25);
-        box(M('terr'),w*0.12,0.55,0.16,x,y+0.2,cz2-0.75);
+      // Symmetric peripteral temple: stepped podium, cella, 6 columns on every side,
+      // entablature over the whole plan, and one gable roof that actually covers the
+      // colonnade it sits on. Everything is measured from the plot centre (0, Z).
+      const base=0.64, CH=2.15, cx=w*0.36, cz=h*0.36, n=6;
+      box(M('stone'), w*0.99, 0.30, h*0.99, 0, 0.15, Z).userData.isFooting=true;
+      box(M('stone'), w*0.96, 0.34, h*0.96, 0, 0.47, Z);
+      // the sheltered room
+      box(M('cream'), w*0.44, 2.1, h*0.44, 0, 1.44, Z);
+      box(M('terr'), 0.62, 0.9, 0.14, 0, 1.6, h*0.22);
+      const col=(x,z)=>{
+        cyl(M('marble'),0.17,0.20,CH,x,base+CH/2,z,10);
+        box(M('marble'),0.40,0.09,0.40,x,base+0.045,z);
+        box(M('marble'),0.44,0.10,0.44,x,base+CH,z);
+      };
+      for(let i=0;i<n;i++){
+        const t=-cx + (2*cx)*i/(n-1);
+        col(t,-cz); col(t,cz);
+        if(i>0 && i<n-1){ col(-cx,t); col(cx,t); }
       }
-      for(let i=0;i<6;i++) cyl(M('marble'),0.2,0.22,2.2,cx2-w*0.34+w*0.68*i/5,1.8,h/2-0.3,10);
-      box(M('gold'),0.5,0.5,0.16,cx2,4.5,cz2);
+      const eY=base+CH;
+      box(M('marble'), w*0.90, 0.36, h*0.90, 0, eY+0.18, Z);
+      const rY=eY+0.36;
+      // eaves must clear the outer columns (span 3.26) or the roof floats inboard of them
+      tileRoof(M('roof2'), w*1.16, h*1.06, rY, 0.8);
+      // pediment closing each gable end, stepped to follow the roof pitch
+      for(const s of [-1,1]) for(let i=0;i<n;i++){
+        const t=-cx + (2*cx)*i/(n-1), f=1-Math.abs(t)/cx, hh=0.14+0.70*f;
+        box(M('terr'), (2*cx)/(n-1)*0.99, hh, 0.16, t, rY+hh/2, s*h*0.44);
+      }
+      box(M('gold'), 0.46, 0.46, 0.16, 0, rY+0.95, Z);
+      cyl(M('gold'), 0.14, 0.02, 0.42, 0, rY+1.34, Z, 8);
       break; }
     case 'park': {
       box(M('green'),w*0.96,0.1,h*0.96,0,0.05,Z);
@@ -53805,12 +53805,32 @@ function buildingMesh(b){
       box(M('marble'),0.34,0.26,0.34,0,1.05,Z-0.9);
       break; }
     case 'senate': {
-      box(M('cream'),w*0.9,2.0,h*0.9,0,1.0,Z);
-      windows(M('win'),w*0.9,1.4,5);
-      for(let i=0;i<6;i++) cyl(M('marble'),0.17,0.19,1.9,-w*0.4+w*0.8*i/5,0.95,h*0.45+0.15,8);
-      tileRoof(M('roof2'),w*0.95,h*0.95,2.0,0.6);
-      box(M('gold'),0.5,0.8,0.5,0,2.95,Z);
-      cyl(M('gold'),0.36,0.02,0.5,0,3.6,Z,8);
+      // Was a single portico row at z=+h*0.45 with a roof narrower than the walls it
+      // capped. Rebuilt as a symmetric peripteral hall, like the temple.
+      const base=0.64, CH=2.15, cx=w*0.40, cz=h*0.40, n=5;
+      box(M('stone'), w*0.99, 0.30, h*0.99, 0, 0.15, Z).userData.isFooting=true;
+      box(M('stone'), w*0.95, 0.34, h*0.95, 0, 0.47, Z);
+      box(M('cream'), w*0.60, 2.0, h*0.60, 0, 1.44, Z);
+      const col=(x,z)=>{
+        cyl(M('marble'),0.17,0.20,CH,x,base+CH/2,z,10);
+        box(M('marble'),0.40,0.09,0.40,x,base+0.045,z);
+        box(M('marble'),0.44,0.10,0.44,x,base+CH,z);
+      };
+      for(let i=0;i<n;i++){
+        const t=-cx + (2*cx)*i/(n-1);
+        col(t,-cz); col(t,cz);
+        if(i>0 && i<n-1){ col(-cx,t); col(cx,t); }
+      }
+      const eY=base+CH;
+      box(M('marble'), w*0.92, 0.34, h*0.92, 0, eY+0.17, Z);
+      const rY=eY+0.34;
+      tileRoof(M('roof2'), w*1.10, h*1.04, rY, 0.72);   // eaves clear the outer columns
+      for(const s of [-1,1]) for(let i=0;i<n;i++){
+        const t=-cx + (2*cx)*i/(n-1), f=1-Math.abs(t)/cx, hh=0.14+0.62*f;
+        box(M('terr'), (2*cx)/(n-1)*0.99, hh, 0.16, t, rY+hh/2, s*h*0.46);
+      }
+      box(M('gold'),0.5,0.8,0.5,0,rY+0.86,Z).userData.isDecor=true;   // acroterion, not a column
+      cyl(M('gold'),0.36,0.02,0.5,0,rY+1.48,Z,8).userData.isDecor=true;
       break; }
     case 'alehouse': case 'gambling': case 'brothel': case 'opiumden': {
       box(M('dark'),w*0.94,0.22,h*0.94,0,0.11,Z);
@@ -54005,6 +54025,25 @@ function canPlace(type,x,z){
     if(c===T_BLD) return 'building';
     if(c===T_ROCK) return 'rock';
   }
+  return null;
+}
+
+// Why a tile cannot take this building right now, for the hover ghost.
+// (updateGhost has called this since it was written but the function never existed --
+// every mousemove threw a ReferenceError, so the ghost and the red 'cannot build here'
+// message were silently dead.)
+const SITE_WHY={out:'off the map', water:'needs a bridge', building:'already built on',
+                rock:'clear the rock first'};
+function siteProblem(type,x,z){
+  if(!BTYPES[type]) return null;
+  if(type==='bridge'){
+    if(!inb(x,z)) return 'out';
+    if(cells[idx(x,z)]!==T_WATER) return 'a bridge must span the river';
+    return null;
+  }
+  const err=canPlace(type,x,z);
+  if(err) return SITE_WHY[err]||err;
+  if(G.money<BTYPES[type].cost) return 'not enough denarii';
   return null;
 }
 
@@ -54648,13 +54687,33 @@ function updateCam(dt){
   cam.cy=cy;
 }
 
-// screen-space pan: map the 2D drag delta to the ground plane along the iso axes
+// screen-space pan: map a 2D drag delta onto the ground plane along the camera's own
+// screen axes. The basis is derived from the camera, not guessed:
+//   zAxis = eye-target direction, xAxis = cross(up, zAxis) = the camera's screen-right.
+// For an isometric camera those are the only two vectors that make drag follow the mouse.
+function camBasis(){
+  const zx=Math.cos(cam.yaw), zz=Math.sin(cam.yaw);   // camera sits at target + d*(zx,.,zz)
+  return { rx:zz, rz:-zx,          // screen-right projected on the ground
+           ux:-zx, uz:-zz };       // screen-up    projected on the ground
+}
+// dx,dy in screen pixels with y pointing DOWN (i.e. raw mouse deltas). Dragging moves the
+// world with the pointer, so the target moves against it.
 function panScreen(dx,dy){
+  const {rx,rz,ux,uz}=camBasis();
   const k=cam.dist*0.0013;
-  const fx=Math.cos(cam.yaw), fz=-Math.sin(cam.yaw);       // screen "up/down" on the ground
-  const rx=-fz,          rz= fx;                            // screen "right" on the ground
-  cam.tx -= (fx*dy + rx*dx)*k*Math.sin(cam.pitch);
-  cam.tz -= (fz*dy + rz*dx)*k*Math.sin(cam.pitch);
+  cam.tx -= (rx*dx + ux*dy)*k;
+  cam.tz -= (rz*dx + uz*dy)*k;
+}
+// One key tap, in world units. Deliberately the SAME convention as panScreen -- dx/dy are
+// screen-space, y pointing DOWN, and both move the world in that direction. Having two
+// functions with opposite sign conventions is exactly how the axes ended up crossed.
+// So "W" is panKey(0,+1): the view pans up, which slides the world down the screen,
+// identical to dragging downward.
+function panKey(dx,dy){
+  const {rx,rz,ux,uz}=camBasis();
+  const s=Math.max(1.8, cam.dist*0.030);   // scale with zoom so it stays usable far out
+  cam.tx -= (rx*dx + ux*dy)*s;
+  cam.tz -= (rz*dx + uz*dy)*s;
 }
 
 // ---------- raycast ----------
@@ -54680,11 +54739,24 @@ function pickBuilding(ev){
 }
 
 // ---------- selection + ghost ----------
-let tool='road', sel=null, demolishMode=false, showPaths=true, pathGroup=null, chainOpen=false;
-function setTool(t){ tool=t; demolishMode=false; refreshBar(); }
-function setDemolish(){ demolishMode=!demolishMode; refreshBar(); }
+// tool === null is the neutral state: no build mode, left-click just selects/inspects.
+let tool=null, sel=null, demolishMode=false, showPaths=true, pathGroup=null, chainOpen=false;
+function setTool(t){
+  // clicking the card you already have selected puts you back on neutral
+  tool = (t===tool && t!=='inspect') ? null : t;
+  if(tool==='inspect') tool='inspect';
+  demolishMode=false; refreshBar(); updateGhost();
+}
+// Esc / right-click: back to neutral, nothing armed.
+function setNeutral(){ tool=null; demolishMode=false; refreshBar(); updateGhost(); }
+function setDemolish(){ demolishMode=!demolishMode; if(demolishMode) tool=null; refreshBar(); updateGhost(); }
 function updateGhost(){
-  if(ghostMesh){ bldGroup.remove(ghostMesh); ghostMesh.geometry.dispose(); ghostMesh=null; }
+  // ghostMesh is a Group, not a Mesh -- it has no .geometry of its own, so dispose the
+  // whole subtree (and only free the shared materials, which the ghost cloned in place).
+  if(ghostMesh){ bldGroup.remove(ghostMesh); ghostMesh.traverse(o=>{ if(o.isMesh && o.geometry) o.geometry.dispose(); }); ghostMesh=null; }
+  const gi=document.getElementById('ghostinfo');
+  if(gi && !gi.textContent) gi.style.display='none';
+  if(!tool || !BTYPES[tool]) return;
   if(!onTile) return;
   if(tool==='inspect') return;
   const err=siteProblem(tool,mouseTile.x,mouseTile.z);
@@ -54701,7 +54773,7 @@ function updateGhost(){
   const [wx,wz]=worldOf(mouseTile.x,mouseTile.z);
   g.position.set(wx+(t.w-1)*TILE/2, mouseTile.y+0.1, wz+(t.h-1)*TILE/2);
   g.renderOrder=5; bldGroup.add(g); ghostMesh=g;
-  const gi=document.getElementById('ghostinfo'); if(gi) gi.textContent = err? ('\u2716 '+err) : (BTYPES[tool].chain||'');
+  if(gi){ gi.textContent = err? ('\u2716 '+err) : (BTYPES[tool].chain||''); gi.style.display='block'; }
 }
 function refreshSel(){
   const p=document.getElementById('selbox');
@@ -54867,6 +54939,7 @@ let dragStart=null, dragPaint=false, panning=false, lastX=0,lastY=0, panBtn=fals
 addEventListener('mousemove',e=>{
   lastX=e.clientX; lastY=e.clientY;
   // right/middle drag = pan (screen-space). no orbit: the iso angle is fixed.
+  if(rmbDown && (Math.abs(e.clientX-rmbDown.x)>4 || Math.abs(e.clientY-rmbDown.y)>4)) rmbMoved=true;
   if(panBtn||orbiting){ panScreen(e.movementX,e.movementY); return; }
   const t=pickTile(e);
   if(t){ mouseTile=t; onTile=true;
@@ -54875,20 +54948,25 @@ addEventListener('mousemove',e=>{
   updateGhost();
 });
 let orbiting=false;
+let rmbDown=null, rmbMoved=false;
 addEventListener('mousedown',e=>{
   if(e.button===1||(e.button===0&&e.shiftKey)){ orbiting=true; panBtn=false; e.preventDefault(); return; }
-  if(e.button===2){ panBtn=true; orbiting=false; return; }
+  if(e.button===2){ panBtn=true; orbiting=false; rmbDown={x:e.clientX,y:e.clientY}; rmbMoved=false; return; }
   if(e.button===0){
     const t=pickTile(e);
     const b=pickBuilding(e);
     if(demolishMode){ if(b) demolish(b); else if(t&&cells[idx(t.x,t.z)]===T_ROAD){ cells[idx(t.x,t.z)]=T_EMPTY; roadLevel[idx(t.x,t.z)]=0; bridgeAt[idx(t.x,t.z)]=0; rebuildRoads(); } return; }
-    if(tool==='inspect'){ sel=b; refreshSel(); return; }
+    if(tool==='inspect'||!tool){ sel=b; refreshSel(); return; }   // neutral left-click = inspect
     if(tool==='road'){ dragStart=t; dragPaint=true; if(t) place('road',t.x,t.z); return; }
     if(t){ const r=place(tool,t.x,t.z); if(r) sel=r; refreshSel(); }
   }
 });
 addEventListener('mouseup',e=>{
-  if(e.button===2) panBtn=false;
+  if(e.button===2){
+    // a right-click that never turned into a drag means "put me back on neutral"
+    if(rmbDown && !rmbMoved) setNeutral();
+    rmbDown=null; panBtn=false;
+  }
   if(e.button===1) orbiting=false;
   dragPaint=false; dragStart=null;
 });
@@ -54898,14 +54976,17 @@ addEventListener('keydown',e=>{
   const k=e.key.toLowerCase();
   if(k==='q'){ setTool('road'); }
   if(k==='e'){ setTool('inspect'); }
-  if(k==='x'){ demolishMode=!demolishMode; refreshBar(); }
+  if(k==='n'){ setNeutral(); }
+  if(k==='x'){ setDemolish(); }
   if(k===' '){ e.preventDefault(); setSpeed(G.speed===0?1:0); }
-  if(k==='escape'){ sel=null; refreshSel(); }
-  if('wasd'.includes(k)&&k.length===1){
+  if(k==='escape'){ setNeutral(); sel=null; refreshSel(); }
+  // WASD and the arrow keys both pan in screen space, on the same axes as the mouse drag
+  // y is DOWN here, matching panScreen/panKey. W = view pans up = world slides down.
+  const PAN={w:[0,1],s:[0,-1],a:[-1,0],d:[1,0],arrowup:[0,1],arrowdown:[0,-1],arrowleft:[-1,0],arrowright:[1,0]}[k];
+  if(PAN){
     e.preventDefault();
-    // WASD pan in screen space, same axes the mouse drag uses
-    if(k==='w') panScreen(0, 14); if(k==='s') panScreen(0,-14);
-    if(k==='a') panScreen(-14,0); if(k==='d') panScreen(14,0);
+    const step=e.shiftKey?2.6:1;
+    panKey(PAN[0]*step, PAN[1]*step);
   }
   if(k==='g'){ showPaths=!showPaths; msg('Servant paths '+(showPaths?'shown':'hidden')); }
   if(k==='c'){ chainOpen=!chainOpen; renderChains(); }
