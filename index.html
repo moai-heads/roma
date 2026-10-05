@@ -53583,8 +53583,15 @@ function M(k){ return mats()[k]; }
 
 function buildingMesh(b){
   const t=BTYPES[b.type], g=new THREE.Group();
-  const w=t.w*TILE, h=t.h*TILE, X=w/2, Z=h/2;
+  // Authoring frame: walls are built around x=0 and (incorrectly, previously) z=Z=h/2,
+  // while the roof helper built around x=X=w/2 and z=Z. That left every roof half a
+  // plot off its walls. X and Z are both the plot centre, i.e. 0, so every helper
+  // (walls, roofs, windows, colonnades) shares one convention.
+  const w=t.w*TILE, h=t.h*TILE, X=0, Z=0;
   const add=(mesh,x,y,z)=>{ mesh.position.set(x,y,z); mesh.castShadow=true; mesh.receiveShadow=true; g.add(mesh); return mesh; };
+  // decoration is excluded when centring the model: a bush or a sign post should not
+  // decide where the walls sit, however big it is.
+  const deco=(mesh,x,y,z)=>{ mesh.userData.isDecor=true; return add(mesh,x,y,z); };
   const box=(mat,sx,sy,sz,x,y,z)=>add(new THREE.Mesh(new THREE.BoxGeometry(sx,sy,sz),mat),x,y,z);
   const cyl=(mat,rt,rb,sy,x,y,z,n=10)=>add(new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,sy,n),mat),x,y,z);
   // pitched gable roof: two real sloped slabs meeting at a ridge, with eaves overhang
@@ -53593,18 +53600,19 @@ function buildingMesh(b){
     const span=(sx-capW)/2;             // horizontal run of each slope
     const ang=Math.atan2(rise,span);
     const slope=Math.hypot(span,rise);
+    const roofParts=[];
     for(const sgn of [-1,1]){
       const m=new THREE.Mesh(new THREE.BoxGeometry(slope*1.04,0.16,sz*1.14), mat);
       add(m, X+sgn*span/2, baseY+rise/2, Z);
       m.rotation.z = -sgn*ang;
+      roofParts.push(m);
     }
-    // ridge cap
-    add(new THREE.Mesh(new THREE.BoxGeometry(capW*1.25,0.13,sz*1.16), mat), X, baseY+rise+0.05, Z);
-    // eaves board along both long edges
+    roofParts.push(add(new THREE.Mesh(new THREE.BoxGeometry(capW*1.25,0.13,sz*1.16), mat), X, baseY+rise+0.05, Z));
     for(const sgn of [-1,1])
-      add(new THREE.Mesh(new THREE.BoxGeometry(0.10,0.10,sz*1.14), mat), X+sgn*(span+0.06), baseY, Z);
+      roofParts.push(add(new THREE.Mesh(new THREE.BoxGeometry(0.10,0.10,sz*1.14), mat), X+sgn*(span+0.06), baseY, Z));
+    for(const m of roofParts) m.userData.isRoof=true;
   };
-  const flatRoof=(mat,sx,sz,y)=>box(mat,sx,0.18,sz,X,y,Z);
+  const flatRoof=(mat,sx,sz,y)=>{ const m=box(mat,sx,0.18,sz,X,y,Z); m.userData.isRoof=true; return m; };
   const plinth=()=>box(M('dark'),w*0.97,0.22,h*0.97,0,0.11,Z*0);
   const windows=(mat,sx,y,n=2)=>{
     for(let i=0;i<n;i++){ const x=X-sx/2 + sx*(i+0.5)/n;
@@ -53698,10 +53706,11 @@ function buildingMesh(b){
       const logG=new THREE.CylinderGeometry(0.16,0.16,0.9,7);
       for(let i=0;i<3;i++){ const l=new THREE.Mesh(logG,M('wood2'));
         l.rotation.x=Math.PI/2; add(l,-0.2+i*0.22,0.55,Z); }
-      box(M('wood'),0.14,1.3,0.14,0.75,0.65,-h/2+0.4);
+      box(M('wood'),0.14,1.3,0.14,0.75,0.65,-h/2+0.4).userData.isDecor=true;
       const axe=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.34,0.26),M('iron'));
-      add(axe,0.75,1.25,-h/2+0.4);
-      add(new THREE.Mesh(new THREE.IcosahedronGeometry(0.42,0),M('green')),-w/2+0.6,0.6,0);
+      axe.userData.isDecor=true; add(axe,0.75,1.25,-h/2+0.4);
+      const fol=new THREE.Mesh(new THREE.IcosahedronGeometry(0.42,0),M('green'));
+      fol.userData.isDecor=true; add(fol,-w/2+0.6,0.6,0);
       break; }
     case 'vineyard': {
       box(M('dark'),w*0.95,0.1,h*0.95,0,0.05,Z);
@@ -53745,9 +53754,9 @@ function buildingMesh(b){
       box(M('wood2'),0.42,0.6,0.06,0,0.34,h*0.44+0.04);
       tileRoof(M('roof'),w*0.96,h*0.96,1.36,0.5);
       if(b.type==='smith'){
-        cyl(M('dark'),0.24,0.34,0.9,-w/2-0.25,0.45,-h/2+0.5,8);
+        cyl(M('dark'),0.24,0.34,0.9,-w/2-0.25,0.45,-h/2+0.5,8).userData.isDecor=true;
         box(M('iron'),0.45,0.3,0.35,-w/2+0.6,1.9,h/2-0.4);
-        add(new THREE.Mesh(new THREE.BoxGeometry(0.7,0.12,0.3),M('iron')),w/2-0.5,0.75,h/2+0.3);
+        const anv=new THREE.Mesh(new THREE.BoxGeometry(0.7,0.12,0.3),M('iron')); anv.userData.isDecor=true; add(anv,w/2-0.5,0.75,h/2+0.3);
       }
       if(b.type==='weaver'){
         // drying cloth on a pole out front, not a panel over the door
@@ -53756,17 +53765,17 @@ function buildingMesh(b){
         box(M('wood'),0.08,1.5,0.08, w*0.34,0.75,pz);
         box(M('wood'),0.08,0.08,0.08,0,1.48,pz);
         for(let i=0;i<3;i++)
-          box([M('gold'),M('terr'),M('cream')][i],0.24,0.78,0.05,-0.28+i*0.28,0.82,pz);
+          box([M('gold'),M('terr'),M('cream')][i],0.24,0.78,0.05,-0.28+i*0.28,0.82,pz).userData.isDecor=true;
       }
       if(b.type==='carpenter'){
-        box(M('wood2'),1.1,0.24,0.3,0,0.65,h*0.32);
-        box(M('wood'),0.9,0.1,0.9,-w/2-0.2,0.35,-h/2+0.4);
+        box(M('wood2'),1.1,0.24,0.3,0,0.65,h*0.32).userData.isDecor=true;
+        box(M('wood'),0.9,0.1,0.9,-w/2-0.2,0.35,-h/2+0.4).userData.isDecor=true;
       }
       if(b.type==='potter'){
         const potG=new THREE.LatheGeometry([new THREE.Vector2(0.02,0),new THREE.Vector2(0.12,0.05),
           new THREE.Vector2(0.18,0.22),new THREE.Vector2(0.12,0.32),new THREE.Vector2(0.14,0.36)],8);
-        for(let i=0;i<4;i++) add(new THREE.Mesh(potG,M('terr')),-0.55+i*0.36,0.1,h*0.44+0.35);
-        cyl(M('dark'),0.4,0.34,0.5,w/2-0.4,0.25,h/2-0.5,8);
+        for(let i=0;i<4;i++){ const pm=new THREE.Mesh(potG,M('terr')); pm.userData.isDecor=true; add(pm,-0.55+i*0.36,0.1,h*0.44+0.35); }
+        cyl(M('dark'),0.4,0.34,0.5,w/2-0.4,0.25,h/2-0.5,8).userData.isDecor=true;
       }
       break; }
     case 'temple': {
@@ -53809,11 +53818,11 @@ function buildingMesh(b){
       box(M('dark'),w*0.88,0.12,h*0.88,0,1.42,Z);
       for(let i=0;i<3;i++) box(M('gold'),0.24,0.5,0.08,-w*0.28+i*w*0.28,0.95,h*0.43+0.05);
       // awning over the door
-      box(M('terr'),w*0.7,0.1,0.5,0,1.35,h/2+0.2);
+      box(M('terr'),w*0.7,0.1,0.5,0,1.35,h/2+0.2).userData.isDecor=true;
       if(b.type==='gambling') for(let i=0;i<3;i++) box(M('gold'),0.1,0.1,0.1,-0.4+i*0.4,1.95,Z-0.5);
-      if(b.type==='opiumden'){ cyl(M('dark'),0.2,0.24,0.5,w/2+0.2,0.35,-h/2+0.4,8);
-        for(let i=0;i<3;i++) box(M('gold'),0.08,0.3,0.08,w/2+0.2,0.6,-h/2+0.4,6); }
-      if(b.type==='brothel') box(M('terr'),0.5,0.36,0.06,w/2-0.3,1.9,Z);
+      if(b.type==='opiumden'){ cyl(M('dark'),0.2,0.24,0.5,w/2+0.2,0.35,-h/2+0.4,8).userData.isDecor=true;
+        for(let i=0;i<3;i++) box(M('gold'),0.08,0.3,0.08,w/2+0.2,0.6,-h/2+0.4,6).userData.isDecor=true; }
+      if(b.type==='brothel') box(M('terr'),0.5,0.36,0.06,w/2-0.3,1.9,Z).userData.isDecor=true;
       break; }
     case 'watchtower': {
       box(M('stone'),1.5,0.3,1.5,0,0.15,Z);
@@ -53838,7 +53847,7 @@ function buildingMesh(b){
       break; }
   }
   if(b.type!=='house'&&b.type!=='watchtower'&&b.type!=='farm'&&b.type!=='farmOlive'&&b.type!=='vineyard'&&b.type!=='park'&&b.type!=='claypit'&&b.type!=='ironMine'&&b.type!=='woodcutter')
-    box(M('stone'),w*0.98,0.62,h*0.98,0,0.02,Z);   // sunk foundation: hides terrain slope gaps
+    box(M('stone'),w*0.98,0.62,h*0.98,0,0.02,Z).userData.isFooting=true;   // sunk foundation: hides terrain slope gaps
   g.add=_add;
   normaliseModel(inner, w, h);
   return g;
@@ -53849,23 +53858,48 @@ function buildingMesh(b){
 // conventions, measure the finished mesh and canonicalise it:
 //   origin = centre of the footprint, base = ground level.
 // Then placeGroup() can position every building identically and be correct by construction.
-function normaliseModel(inner, fw, fh){
-  // two passes: centre + ground, then contain. scaling perturbs a clamped centre,
-  // so the pass is repeated until it converges.
-  const CLAMP=TILE*1.6;
-  for(let pass=0; pass<2; pass++){
-    inner.updateMatrixWorld(true);
-    const bb=new THREE.Box3().setFromObject(inner);
+// Find the model's core mass: the pieces that define the building, weighted by footprint
+// area. Small asymmetric decoration (a chimney, a hanging sign, a sawhorse, a bare tree)
+// is excluded, because otherwise it drags the walls and roof off the foundation.
+function modelCore(inner){
+  inner.updateMatrixWorld(true);
+  const items=[];
+  inner.traverse(o=>{
+    if(!o.isMesh || o.userData.isDecor) return;
+    o.geometry.computeBoundingBox();
+    const bb=o.geometry.boundingBox.clone(); bb.applyMatrix4(o.matrixWorld);
     if(!isFinite(bb.min.x)) return;
-    const cx=(bb.min.x+bb.max.x)/2, cz=(bb.min.z+bb.max.z)/2;
-    inner.position.x += Math.max(-CLAMP,Math.min(CLAMP,-cx));
-    inner.position.z += Math.max(-CLAMP,Math.min(CLAMP,-cz));
-    inner.position.y -= bb.min.y;
+    items.push({bb, a:Math.max(1e-6,(bb.max.x-bb.min.x)*(bb.max.z-bb.min.z))});
+  });
+  if(!items.length) return null;
+  const maxA=items.reduce((m,i)=>i.a>m?i.a:m,0);
+  const core=items.filter(i=>i.a>=maxA*0.12);
+  let sw=0,sx=0,sz=0,minx=1e9,maxx=-1e9,minz=1e9,maxz=-1e9;
+  for(const i of core){
+    sw+=i.a; sx+=i.a*(i.bb.min.x+i.bb.max.x)/2; sz+=i.a*(i.bb.min.z+i.bb.max.z)/2;
+    minx=Math.min(minx,i.bb.min.x); maxx=Math.max(maxx,i.bb.max.x);
+    minz=Math.min(minz,i.bb.min.z); maxz=Math.max(maxz,i.bb.max.z);
+  }
+  // decoration is already excluded above, so the ground line is simply the lowest core piece
+  let base=1e9; for(const i of core) base=Math.min(base,i.bb.min.y);
+  return { x:sx/sw, z:sz/sw, base, spanX:maxx-minx, spanZ:maxz-minz };
+}
+
+// Canonicalise: core centred on the origin, base on the ground, never spilling into the
+// neighbouring plot. Repeated because scaling perturbs a clamped centre.
+function normaliseModel(inner, fw, fh){
+  for(let pass=0; pass<2; pass++){
+    const c=modelCore(inner);
+    if(!c) return;
+    const CLAMP=TILE*1.6;
+    inner.position.x += Math.max(-CLAMP,Math.min(CLAMP,-c.x));
+    inner.position.z += Math.max(-CLAMP,Math.min(CLAMP,-c.z));
+    inner.position.y -= c.base;
     if(!fw || pass===1) break;
-    inner.updateMatrixWorld(true);
-    const b2=new THREE.Box3().setFromObject(inner);
-    const sx=Math.min(1,(fw*1.06)/Math.max(1e-6,b2.max.x-b2.min.x));
-    const sz=Math.min(1,(fh*1.06)/Math.max(1e-6,b2.max.z-b2.min.z));
+    const c2=modelCore(inner);
+    if(!c2) break;
+    const sx=Math.min(1,(fw*1.06)/Math.max(1e-6,c2.spanX));
+    const sz=Math.min(1,(fh*1.06)/Math.max(1e-6,c2.spanZ));
     if(sx>=0.999&&sz>=0.999) break;
     inner.scale.set(sx,1,sz);
   }
@@ -53878,15 +53912,13 @@ function houseMesh(tier){
   const cyl=(mat,rt,rb,sy,x,y,z,n=10)=>{const o=new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,sy,n),mat);
     o.position.set(x,y,z);o.castShadow=true;g.add(o);return o;};
   const roof=(mat,sx,sz,baseY,rise)=>{
-    const steps=6, capW=sx*0.28;
-    for(let i=0;i<steps;i++){
-      const wAt=(sx-capW)*((steps-i)/steps);
-      const y=baseY+rise*(i/steps);
-      const sl=Math.hypot((sx-capW)/steps, rise/steps);
-      const cx=(sx-capW)/2*(i/steps);
-      box(mat,sl*1.08,0.1,sz*1.08, cx, y+0.03, 0);
-      box(mat,sl*1.08,0.1,sz*1.08, -cx, y+0.03, 0);
+    const capW=sx*0.22, span=(sx-capW)/2;
+    const ang=Math.atan2(rise,span), slope=Math.hypot(span,rise);
+    for(const sgn of [-1,1]){
+      const m=box(mat,slope*1.04,0.14,sz*1.14, sgn*span/2, baseY+rise/2, 0);
+      m.rotation.z=-sgn*ang; m.userData.isRoof=true;
     }
+    box(mat,capW*1.3,0.12,sz*1.16, 0, baseY+rise+0.04, 0).userData.isRoof=true;
   };
   const win=(x,y,z=0.86)=>box(M('win'),0.3,0.38,0.08,x,y,z);
 
