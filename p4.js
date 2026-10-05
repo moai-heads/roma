@@ -104,6 +104,7 @@ function place(type,x,z,free){
     work:0, jobs:t.jobs||0, workers:0, level:1, merit:0, warnT:0, history:[], moneyMade:0, tierT:0 };
   for(let j=0;j<t.h;j++) for(let i=0;i<t.w;i++) bldAt[idx(x+i,z+j)]=b.id;
   blds.push(b);
+  registerSources(b);
   b.mesh=buildingMesh(b); placeGroup(b);
   msg(t.name+' built','ok');
   return b;
@@ -117,6 +118,8 @@ function placeGroup(b){
 }
 function demolish(b){
   const t=BTYPES[b.type];
+  unregisterSources(b);
+  for(const a of [...agents]) if(a.tower===b.id) killAgent(a);
   for(let j=0;j<t.h;j++) for(let i=0;i<t.w;i++){ const c=idx(b.x+i,b.z+j); cells[c]=T_EMPTY; bldAt[c]=-1; }
   bldGroup.remove(b.mesh);
   blds.splice(blds.indexOf(b),1);
@@ -142,6 +145,8 @@ function rebuildRoads(){
       if(inb(xx,zz)&&cells[idx(xx,zz)]===T_ROAD) conn++; }
     roadLevel[n]= conn>=3?2:1;
   }
+  roadTiles=[];
+  for(let z=0;z<N;z++) for(let x=0;x<N;x++) if(cells[idx(x,z)]===T_ROAD) roadTiles.push([x,z]);
   const mats=[null, mkMat(0x6b5f4a), mkMat(0x8a7b60)];
   for(let z=0;z<N;z++) for(let x=0;x<N;x++){
     if(cells[idx(x,z)]!==T_ROAD) continue;

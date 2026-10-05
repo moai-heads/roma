@@ -98,7 +98,7 @@ kbd{background:#3a2e1e;border:1px solid #6a5436;border-radius:3px;padding:0 4px;
 .card.on .cnm{color:#1a1408}
 .ccost{font-size:9.5px;color:#c8a04a;line-height:1.1}
 .card.civic{border-top-color:#6a8ac8}.card.prod{border-top-color:#7aa85a}
-.card.ind{border-top-color:#c88a4a}.card.res{border-top-color:#c85a7a}.card.infra{border-top-color:#8a8a8a}
+.card.ind{border-top-color:#c88a4a}.card.vice{border-top-color:#b04ac8}.card.law{border-top-color:#c85a5a}.card.res{border-top-color:#c85a7a}.card.infra{border-top-color:#8a8a8a}
 .card.poor{opacity:.5}
 .card.danger{border-top-color:#c85a5a}
 #docknote{font-size:9.5px;color:#8a7c62;margin-top:5px;text-align:center}

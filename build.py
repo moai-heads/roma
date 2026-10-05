@@ -1,4 +1,4 @@
-body = ''.join(open(f'p{i}.js').read() for i in range(1,8))
+body = ''.join(open(f'p{i}.js').read() for i in range(1,9))
 three = open('three_inline.js').read()
 tpl = open('tpl.html').read()
 open('roma.html','w').write(tpl.replace('/*THREE*/',three).replace('/*BODY*/',body))

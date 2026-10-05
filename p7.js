@@ -27,7 +27,9 @@ function tickMsgs(dt){
 // --- category tiles ---
 // --- AoE-style command grid: every group visible, no submenus ---
 const GROUPS=[
-  {k:'civic', label:'\u25C9  Civic',    types:['market','well','cistern','aqueduct','temple','park','senate','granary','import']},
+  {k:'civic', label:'\u25C9  Civic',    types:['market','well','cistern','aqueduct','temple','park','senate','granary']},
+  {k:'vice',  label:'\u2620  Vice',     types:['alehouse','gambling','brothel','opiumden']},
+  {k:'law',   label:'\u2692  Law',      types:['watchtower']},
   {k:'prod',  label:'\u2698  Land',     types:['farm','farmOlive','vineyard','claypit','ironMine','woodcutter']},
   {k:'ind',   label:'\u2696  Industry', types:['potter','carpenter','smith','weaver']},
   {k:'res',   label:'\u2302  Housing',  types:['house']},
@@ -35,7 +37,8 @@ const GROUPS=[
 ];
 const ICONS={well:'\u283C',cistern:'\u25F0',aqueduct:'\u2248',farm:'\u2698',farmOlive:'\u2696',claypit:'\u25B2',
   ironMine:'\u2692',woodcutter:'\u2702',vineyard:'\u25C7',market:'\u25EC',granary:'\u233F',potter:'\u25CC',
-  carpenter:'\u2699',smith:'\u2692',weaver:'\u274F',temple:'\u25D3',park:'\u266F',senate:'\u265F',import:'\u2696',house:'\u2302'};
+  carpenter:'\u2699',smith:'\u2692',weaver:'\u274F',temple:'\u25D3',park:'\u266F',senate:'\u265F',house:'\u2302',
+  alehouse:'\u2697',gambling:'\u2680',brothel:'\u2620',opiumden:'\u262A',watchtower:'\u2692'};
 
 function tileHTML(k, extra){
   const t=BTYPES[k];
@@ -65,7 +68,8 @@ function refreshBar(){
 
 // --- production chain legend, as a 2-column grid ---
 const CHAIN=['well','cistern','aqueduct','farm','farmOlive','vineyard','claypit','ironMine',
-  'woodcutter','potter','carpenter','smith','weaver','import','market','house'];
+  'woodcutter','potter','carpenter','smith','weaver','market','house',
+  'alehouse','gambling','brothel','opiumden','watchtower'];
 function renderChains(){
   const el=document.getElementById('chgrid');
   el.innerHTML=CHAIN.map(k=>{
@@ -92,6 +96,12 @@ function renderHUD(){
   <div class="stat"><b>${MONTHS[G.month]} ${2040+G.year}</b><span>date</span></div>
   <div class="stat"><b>${Math.round(G.happiness)}</b><span>contentment</span></div>
   <div class="stat"><b>${Math.round(G.favor)}</b><span>favor</span></div>
+  <div class="stat"><b>${Math.round((G.moodAvg||0)*100)}</b><span>avg mood</span></div>
+  <div class="stat"><b style="color:#e07be0">${Math.round(G.vice||0)}</b><span>vice tax</span></div>
+  <div class="stat"><b style="color:#e0655a">${criminals().length}</b><span>criminals</span></div>
+  <div class="stat"><b>${prefects().length}</b><span>prefects</span></div>
+  <div class="stat"><b>${collectors().length}</b><span>collectors</span></div>
+  <div class="stat"><b style="color:#e0655a">${Math.round(G.stolen||0)}</b><span>stolen</span></div>
   <div class="stat taxrate"><span>tax rate</span><span class="trbtns">
      ${[1,2,3].map(r=>`<button class="${G.taxRate===r?'on':''}" onclick="setTaxRate(${r})">${['Lo','Md','Hi'][r-1]}</button>`).join('')}
      </span></div>
@@ -160,6 +170,7 @@ addEventListener('keydown',e=>{
   }
   if(k==='g'){ showPaths=!showPaths; msg('Servant paths '+(showPaths?'shown':'hidden')); }
   if(k==='c'){ chainOpen=!chainOpen; renderChains(); }
+  if(k==='v'){ cycleFieldOverlay(); }
   if(k==='f'){ soilOverlay.visible=!soilOverlay.visible;
     msg('Fertile ground overlay '+(soilOverlay.visible?'on':'off'),'ok'); }
 });
@@ -239,10 +250,10 @@ function init(){
   place('smith',C+4,C+18,true);
   place('carpenter',C+10,C+18,true);
   place('weaver',C+0,C+18,true);
-  place('import',C-2,C+18,true);
   rebuildRoads();
+  fieldTick(0.25);
   msg('A new colony on the Tiber. Roads first, then a market.','');
+  msg('Press V to cycle the desirability / mood / sin / crime fields.','');
   msg('Households grow when servants deliver goods to their doorstep.','');
   requestAnimationFrame(loop);
 }
-init();

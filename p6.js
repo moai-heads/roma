@@ -98,11 +98,12 @@ function refreshSel(){
       info += `<br><b>water:</b> ${hasWater(sel)?'supplied by '+(sel.waterFrom=hasWater(sel)).type:'<span style="color:#ff8080">none in range</span>'}`;
   } else info=t.desc||'';
   const cells = sel.type==='house'
-    ? [[ 'Capacity', HOUSE_TIERS[sel.tier].cap],['Tax', HOUSE_TIERS[sel.tier].tax],
-       ['Desirability', Math.round(desirability(sel)*10)/10],['Populace', HOUSE_TIERS[sel.tier].pop]]
+    ? [[ 'Capacity', HOUSE_TIERS[sel.tier].cap],['Tax owed', Math.round(sel.debt||0)],
+       ['Desirability', Math.round(desirability(sel))],['Mood', Math.round(moodAt(sel)*100)/100],
+       ['Crime here', Math.round(crimeAt(sel.x,sel.z)*100)/100],['Populace', HOUSE_TIERS[sel.tier].pop]]
     : sel.type!=='road'
-    ? [[ 'Jobs', BTYPES[sel.type].jobs||0],['Cost', BTYPES[sel.type].cost],
-       ['State', sel.warn?'idle':'working'],['Soil', Math.round(fertilityAt(sel.x,sel.z,t.w,t.h)*100)+'%']]
+    ? [[ 'Desirability', Math.round(desirability(sel))],['Mood', Math.round(moodAt(sel)*100)/100],
+       ['Sin here', Math.round(sinAt(sel)*100)/100],['Crime here', Math.round(crimeAt(sel.x+((t.w/2)|0),sel.z+((t.h/2)|0))*100)/100]]
     : [];
   p.innerHTML=`<div class="hdr"><span>${t.name}</span><span>${Math.round(sel.cx/2+N/2)},${Math.round(sel.cz/2+N/2)}</span></div>
    <div class="body">${info}</div>

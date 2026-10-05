@@ -33,6 +33,7 @@ function fertilityAt(x,z,w,h){
 const G = {                // global state
   money: 5000, month: 0, year: 0, speed: 1, paused: false,
   pop: 0, happiness: 70, favor: 50, taxRate: 2, tax: 0, upkeep: 0, balance: 0, taxpayers: 0, netTick: 0,
+  vice:0, moodAvg:0, stolen:0, taxHauled:0, slain:0,
 };
 const stock = { food:0, clay:0, wood:0, wine:0, pottery:0, tools:0, iron:0, luxury:0 };
 const depot = { food:0 }; // granary storage
@@ -43,6 +44,7 @@ const bldAt = new Int16Array(N*N).fill(-1);
 const roadLevel = new Uint8Array(N*N);
 
 let terrainGroup, roadGroup, bldGroup, cartGroup, decoGroup;
+let roadTiles=[];
 const blds = [];
 let hoverMesh, ghostMesh;
 

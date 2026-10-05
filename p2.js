@@ -50,9 +50,21 @@ const BTYPES = {
   temple:    {name:'Temple',          cost:300, w:2,h:2, jobs:4, cat:'civic', desc:'+Favor, +happiness nearby.'},
   park:      {name:'Park',            cost:120, w:2,h:2, jobs:1, cat:'civic', desc:'+Happiness within 7 tiles.'},
   senate:    {name:'Senate',          cost:1200,w:3,h:3, jobs:12,cat:'civic', desc:'+Favor, allows bigger houses to evolve.'},
-  import:    {name:'Trading Post',    cost:400, w:2,h:2, jobs:6, cat:'civic',
-              desc:'Buys iron off foreign ships for hard cash.',
-              chain:'money  ->  4 iron  (every 3 cycles)'},
+  alehouse: {name:'Alehouse',        cost:260,  w:2,h:2, jobs:6, cat:'vice', tax:22,
+              desc:'Strong drink and worse company. Raises SIN nearby and drags desirability down, but it pays well.',
+              chain:'sin +0.30 (r7)  ->  tax income  |  evolves at sin > 0.55'},
+  gambling:  {name:'Gambling Den',    cost:400,  w:2,h:2, jobs:8, cat:'vice', tax:40,
+              desc:'Dice and knucklebones. Richer, filthier, and it evolved out of an alehouse.',
+              chain:'sin +0.42 (r8)  ->  tax income'},
+  brothel:   {name:'Brothel',         cost:520,  w:2,h:2, jobs:9, cat:'vice', tax:58,
+              desc:'Vice with a roof. Very high sin, very bad for the neighbourhood.',
+              chain:'sin +0.52 (r9)  ->  tax income  |  evolves at sin > 0.75'},
+  opiumden:  {name:'Opium Den',       cost:700,  w:2,h:2, jobs:10,cat:'vice', tax:84,
+              desc:'The end of the ladder. Enormous sin, and it ruins everything around it.',
+              chain:'sin +0.72 (r10)  ->  tax income'},
+  watchtower:{name:'Watchtower',      cost:340,  w:1,h:1, jobs:6, cat:'law',
+              desc:'Spawns prefects on a fixed timer. They A* to whatever crime the field reports and fight it.',
+              chain:'prefect respawns every 18s  ->  patrols the roads'},
 };
 
 const RECIPES = {
@@ -66,7 +78,6 @@ const RECIPES = {
   carpenter: {in:{wood:4},            out:'tools',   amt:3},
   smith:     {in:{iron:3,wood:2},     out:'tools',   amt:3, water:true},
   weaver:    {in:{pottery:3,wood:2},  out:'luxury',  amt:3},
-  import:    {out:'iron',  amt:4},
 };
 
 // which buildings need a water radius around them to operate
@@ -314,6 +325,28 @@ function buildingMesh(b){
       box(M('gold'),0.5,0.8,0.5,0,2.95,Z);
       cyl(M('gold'),0.36,0.02,0.5,0,3.6,Z,8);
       break; }
+    case 'alehouse': case 'gambling': case 'brothel': case 'opiumden': {
+      box(M('dark'),w*0.94,0.22,h*0.94,0,0.11,Z);
+      box(M('wood2'),w*0.86,1.25,h*0.86,0,0.75,Z);
+      box(M('dark'),w*0.88,0.12,h*0.88,0,1.42,Z);
+      for(let i=0;i<3;i++) box(M('gold'),0.24,0.5,0.08,-w*0.28+i*w*0.28,0.95,h*0.43+0.05);
+      // awning over the door
+      box(M('terr'),w*0.7,0.1,0.5,0,1.35,h/2+0.2);
+      if(b.type==='gambling') for(let i=0;i<3;i++) box(M('gold'),0.1,0.1,0.1,-0.4+i*0.4,1.95,Z-0.5);
+      if(b.type==='opiumden'){ cyl(M('dark'),0.2,0.24,0.5,w/2+0.2,0.35,-h/2+0.4,8);
+        for(let i=0;i<3;i++) box(M('gold'),0.08,0.3,0.08,w/2+0.2,0.6,-h/2+0.4,6); }
+      if(b.type==='brothel') box(M('terr'),0.5,0.36,0.06,w/2-0.3,1.9,Z);
+      break; }
+    case 'watchtower': {
+      box(M('stone'),1.5,0.3,1.5,0,0.15,Z);
+      box(M('stone'),1.05,3.0,1.05,0,1.7,Z);
+      for(let i=0;i<4;i++) box(M('dark'),1.09,0.1,1.09,0,0.8+i*0.7,Z);
+      box(M('dark'),1.5,0.25,1.5,0,3.35,Z);
+      for(const [dx,dz] of [[-0.6,-0.6],[0.6,-0.6],[-0.6,0.6],[0.6,0.6]])
+        box(M('stone'),0.24,0.6,0.24,dx,3.75,Z+dz);
+      box(M('roof2'),1.7,0.16,1.7,0,4.15,Z);
+      cyl(M('gold'),0.06,0.06,0.7,0,4.55,Z,5);
+      break; }
     case 'import': {
       box(M('stone'),w*0.9,0.3,h*0.9,0,0.15,Z);
       box(M('cream'),w*0.85,1.3,h*0.85,0,0.95,Z);
@@ -326,7 +359,7 @@ function buildingMesh(b){
       box(M('terr'),0.5,0.34,0.06,w/2-0.4,1.5,-h/2+0.5);
       break; }
   }
-  if(b.type!=='house'&&b.type!=='farm'&&b.type!=='farmOlive'&&b.type!=='vineyard'&&b.type!=='park'&&b.type!=='claypit'&&b.type!=='ironMine'&&b.type!=='woodcutter')
+  if(b.type!=='house'&&b.type!=='watchtower'&&b.type!=='farm'&&b.type!=='farmOlive'&&b.type!=='vineyard'&&b.type!=='park'&&b.type!=='claypit'&&b.type!=='ironMine'&&b.type!=='woodcutter')
     box(M('stone'),w*0.98,0.22,h*0.98,0,0.11,Z);
   return g;
 }

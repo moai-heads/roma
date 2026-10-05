@@ -2,21 +2,7 @@
 function foodCap(){ return blds.some(b=>b.type==='granary')?900:200; }
 function allJobs(){ return blds.reduce((s,b)=>s+(b.type==='house'?0:BTYPES[b.type].jobs||0),0); }
 function countPop(){ return blds.filter(b=>b.type==='house').reduce((s,b)=>s+HOUSE_TIERS[b.tier].pop,0); }
-function desirability(b){
-  let d=0;
-  if(hasWater(b)) d+=3;
-  let cult=0, park=0, sent=0;
-  for(const t of blds){
-    if(!t.active) continue;
-    if(t.type==='temple') cult+=Math.max(0,3-Math.hypot(t.x-b.x,t.z-b.z)*0.35);
-    if(t.type==='park')   park+=Math.max(0,3-Math.hypot(t.x-b.x,t.z-b.z)*0.4);
-    if(t.type==='senate') sent+=Math.max(0,3-Math.hypot(t.x-b.x,t.z-b.z)*0.25);
-  }
-  d+=cult*1.2+park*1.0+sent*0.8;
-  const n=Math.max(0,1-Math.hypot(b.x-N/2,b.z-N/2)/(N*0.42));
-  d+=n*3;
-  return d;
-}
+function desirability(b){ return F_DESIRE.atBuilding(b); }
 
 function simTick(dt){
   G.netTick=(G.netTick||0)+1;
@@ -95,7 +81,8 @@ function simTick(dt){
     if(!roadTo(b)) continue;
     // desirability requirement
     if(next.water && !hasWater(b)){ b.warn='no drinking water in reach'; continue; }
-    if(desirability(b) < (b.tier+1)*1.15) continue;
+    if(desirability(b) < (b.tier+1)*2.6) continue;
+    if(moodAt(b) < -0.02) { b.warn='the mood here is too low to grow'; continue; }
     for(const k in next.needs) inbox[k]-=next.needs[k];
     b.tier++;
     b.level=b.tier+1;
@@ -105,6 +92,44 @@ function simTick(dt){
     msg(blds.indexOf(b)<0?'':(HOUSE_TIERS[b.tier].name+' completed!'),'good');
     notifications.push({t:'A house grew into a '+HOUSE_TIERS[b.tier].name+'!',k:'evolve'});
   }
+  // --- bad mood, or a supply that keeps failing, drives a house back down a tier ---
+  for(const b of blds){
+    if(b.type!=='house'||!b.active) continue;
+    if(b.tier<1) continue;
+    if(b.tierT>0){ b.tierT-=1; continue; }
+    const m=moodAt(b);
+    b.mood=m;
+    const starving = (depot.food<10) || (b.inbox.food||0)<1;
+    if(m<-0.22 || (starving && m<-0.05)){
+      b.demoteT=(b.demoteT||0)+1;
+      if(b.demoteT>3){
+        b.demoteT=0; b.tier--; b.level=b.tier+1;
+        bldGroup.remove(b.mesh); b.mesh=houseMesh(b.tier); placeGroup(b);
+        msg('A household slipped back to a '+(HOUSE_TIERS[b.tier].name||'tent')+' — bad mood','bad');
+      }
+    } else b.demoteT=0;
+  }
+  // --- vice evolves out of sustained sin ---
+  for(const b of blds){
+    if(b.type!=='alehouse'&&b.type!=='brothel') continue;
+    const s2=b.sinLocal||0;
+    const gate = b.type==='alehouse'?0.55:0.75;
+    if(s2>gate){
+      b.evoT=(b.evoT||0)+dt;
+      if(b.evoT>45){
+        b.evoT=0;
+        const to = b.type==='alehouse'?'gambling':'opiumden';
+        unregisterSources(b); b.type=to;
+        registerSources(b);
+        bldGroup.remove(b.mesh); b.mesh=buildingMesh(b); placeGroup(b);
+        msg('The '+BTYPES[to].name+' has grown out of the local vice','bad');
+      }
+    } else b.evoT=Math.max(0,(b.evoT||0)-dt*0.5);
+  }
+  // --- field + agent simulation ---
+  fieldAcc+=dt;
+  while(fieldAcc>=0.25){ fieldAcc-=0.25; fieldTick(0.25); }
+  updateAgents(dt);
   // --- despawn/downgrade if abandoned ---
   for(const b of [...blds]){
     if(b.type!=='house') continue;
@@ -115,7 +140,7 @@ function simTick(dt){
   // --- pop, tax, happiness ---
   G.pop=countPop();
   taxTick(dt);
-  G.happiness=Math.max(0,Math.min(100, 55 + (blds.some(b=>b.type==='park')?10:0) + (stock.wine>5?5:0)
+  G.happiness=Math.max(0,Math.min(100, 50 + (G.moodAvg||0)*70 + (blds.some(b=>b.type==='park')?10:0) + (stock.wine>5?5:0)
       - (G.taxRate-1)*11                      // heavy taxation angers the plebs
       + (G.balance>0?4:-6)                    // solvent or not
       - (depot.food<10?15:0) - (blds.filter(b=>b.warn).length>6?10:0)));
@@ -169,19 +194,34 @@ function computeBooks(){
     if(b.warn) u=Math.round(u*0.6);
     upkeep += u;
   }
+  let vice=0;
+  for(const b of blds){
+    if(!VICE.includes(b.type)||!b.active) continue;
+    const local=Math.max(0,b.sinLocal||0);
+    const m=moodAt(b);
+    if(m<-0.55){ b.warn='condemned: the neighbourhood will not tolerate it'; continue; }
+    b.warn=null;
+    // revenue scales with how much sin is actually around it, times the
+    // neighbourhood's tolerance — a contented, sin-free block pays nothing
+    vice += BTYPES[b.type].tax * local * Math.max(0, 0.45+m) * 3.2 * G.taxRate;
+  }
+  G.vice=Math.floor(vice);
+  gross += vice;
   const roads=[...cells].filter(c=>c===T_ROAD).length;
   upkeep += roads*0.03;
   G.tax=Math.floor(gross);
   G.upkeep=Math.round(upkeep);
   G.balance=G.tax-G.upkeep;
   G.taxpayers=active;
+  G.serfTax=G.tax-Math.round(vice);
   G.solvent = G.money + Math.max(0,G.balance) > 60;
 }
 
 function taxTick(dt){
   // continuous accrual so the treasury never feels frozen
   computeBooks();
-  G.money += G.balance * dt * 0.08;
+  G.money += G.vice * dt * 0.08;     // vice pays straight in
+  G.money -= G.upkeep * dt * 0.10;   // services are paid for continuously
   if(G.balance < 0){
     // unpaid public services start to rot
     G.unpaid = (G.unpaid||0) + dt*0.02;
@@ -195,8 +235,19 @@ function taxTick(dt){
 function settleMonth(){
   computeBooks();
   G.lastMonth = {tax:G.tax, upkeep:G.upkeep, bal:G.balance};
+  // house tax becomes debt on the household; a collector has to walk it to the market
+  for(const b of blds){
+    if(b.type!=='house') continue;
+    const t=HOUSE_TIERS[b.tier];
+    if(t.tax<=0) continue;
+    const mood=0.45+Math.min(1.5, moodAt(b)/4.5);
+    b.debt=(b.debt||0) + t.tax*mood*G.taxRate;
+    b.dueAge=(b.dueAge||0)+1;
+    // tax uncollected for 3 months is eventually recovered by the state, at a loss
+    if(b.dueAge>=4 && b.debt>0){ G.money += b.debt*0.85; b.debt=0; b.dueAge=0;
+      msg('The state recovered uncollected tax','bad',true); }
+  }
   if(G.balance<0){
-    G.money += G.balance;
     msg('The treasury is in deficit: '+(G.balance)+' denarii. Services decay.','bad');
   }
   // unpaid households abandon
