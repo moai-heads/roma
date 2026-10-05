@@ -53255,6 +53255,7 @@ const depot = { food:0 }; // granary storage
 const cells = new Uint8Array(N*N);      // T_*
 const bldAt = new Int16Array(N*N).fill(-1);
 const roadLevel = new Uint8Array(N*N);
+const bridgeAt  = new Uint8Array(N*N);   // road tiles spanning the river
 
 let terrainGroup, roadGroup, bldGroup, cartGroup, decoGroup;
 let roadTiles=[];
@@ -53280,7 +53281,10 @@ function buildTerrain(){
   for(let i=0;i<p.count;i++){
     const wx=p.getX(i), wz=p.getZ(i);
     const gx=Math.floor(wx/TILE+N/2), gz=Math.floor(wz/TILE+N/2);
-    p.setY(i, (inb(gx,gz)? heightAt(gx,gz):0) - 0.15);
+    let h = inb(gx,gz)? heightAt(gx,gz) : 0;
+    // carve the riverbed down where there is water
+    if(inb(gx,gz) && cells[idx(gx,gz)]===T_WATER) h -= 0.62;
+    p.setY(i, h - 0.15);
   }
   g.computeVertexNormals();
   const cols=[];
@@ -53293,11 +53297,11 @@ function buildTerrain(){
       const cc=cells[idx(gx,gz)], f=soil[idx(gx,gz)];
       if(cc===T_WATER){
         const d=heightAt(gx,gz);
-        c=new THREE.Color().setHSL(0.55,0.42,0.20+d*0.03);
+        c=new THREE.Color().setHSL(0.55,0.45,0.13+d*0.03);
       } else if(cc===T_SAND){ c=new THREE.Color(0xc9b47a); }
       else {
         // fertile ground is richer / more yellow-green, barren is pale grey-brown
-        c=new THREE.Color().setHSL(0.22-0.06*(1-f), 0.16+0.34*f, 0.20+0.16*f);
+        c=new THREE.Color().setHSL(0.235-0.055*(1-f), 0.30+0.36*f, 0.185+0.15*f);
         const h=heightAt(gx,gz);
         c.offsetHSL(0,0,-h*0.09);
         // patchy noise so it doesn't look like a flat wash
@@ -53318,24 +53322,64 @@ function buildTerrain(){
   decoTerrain();
 }
 
-// animated water plane
+// ---------- river: real water tiles only ----------
 let waterMesh;
+function carveRiver(){
+  // a meandering river across the map, 2-3 tiles wide, generated BEFORE terrain build
+  // the river runs down the far west margin, clear of the founding site (x>=20),
+  // so the starting city is never split. the player bridges it to expand west.
+  let cx=6+Math.sin(Math.random()*6.28)*2, amp=7, ph=Math.random()*6.28;
+  for(let z=0;z<N;z++){
+    cx += Math.sin(z*0.085+ph)*0.42; cx += (9-cx)*0.012;
+    cx=Math.max(4,Math.min(11,cx));
+    const w=2+Math.sin(z*0.21+ph)*0.9;
+    for(let i=-3;i<=3;i++){
+      const x=Math.round(cx+i);
+      if(inb(x,z) && Math.abs(i)<=w) cells[idx(x,z)]=T_WATER;
+    }
+  }
+  // banks get a sand fringe so the shoreline reads properly
+  for(let z=0;z<N;z++) for(let x=0;x<N;x++){
+    if(cells[idx(x,z)]!==T_EMPTY) continue;
+    for(let j=-1;j<=1;j++) for(let i=-1;i<=1;i++){
+      if(inb(x+i,z+j)&&cells[idx(x+i,z+j)]===T_WATER){ cells[idx(x,z)]=T_SAND; j=9; break; }
+    }
+  }
+}
+
 function buildWater(){
-  const g=new THREE.PlaneGeometry(N*TILE*1.4, N*TILE*1.4, 90,90);
-  g.rotateX(-Math.PI/2);
-  const m=new THREE.MeshStandardMaterial({color:0x2b5f86, roughness:0.16, metalness:0.35,
-    transparent:true, opacity:0.86});
-  m.onBeforeCompile=sh=>{
-    sh.uniforms.uT={value:0};
-    waterMesh.userData.sh=sh;
-    sh.vertexShader='uniform float uT;\n'+sh.vertexShader.replace('#include <begin_vertex>',
-      '#include <begin_vertex>\n transformed.y += sin(position.x*0.22+uT*1.3)*0.06 + cos(position.z*0.19+uT)*0.05;');
-    sh.fragmentShader=sh.fragmentShader.replace('#include <color_fragment>',
-      '#include <color_fragment>\n diffuseColor.rgb *= 0.9+0.2*sin(vViewPosition.x*0.6+vViewPosition.z*0.4);');
-  };
-  waterMesh=new THREE.Mesh(g,m);
-  waterMesh.position.y=0.32;
+  waterMesh=new THREE.Group();
+  // one animated quad per water tile, sitting at the local terrain height
+  const qs=[];
+  for(let z=0;z<N;z++) for(let x=0;x<N;x++){
+    if(cells[idx(x,z)]!==T_WATER) continue;
+    const q=new THREE.PlaneGeometry(TILE,TILE,2,2); q.rotateX(-Math.PI/2);
+    const pos=q.attributes.position;
+    for(let i=0;i<pos.count;i++) pos.setY(i, heightAt(x,z)-0.30);
+    qs.push(q);
+  }
+  const m=new THREE.MeshStandardMaterial({color:0x2f6a92, roughness:0.18, metalness:0.30, flatShading:true});
+  waterMesh=new THREE.Mesh(mergeGeos(qs),m);
+  waterMesh.receiveShadow=true;
   scene.add(waterMesh);
+}
+
+// merge a list of geometries (same material) into one buffer
+function mergeGeos(list){
+  let vc=0;
+  for(const g of list) vc+=g.attributes.position.count;
+  const P=new Float32Array(vc*3), Nm=new Float32Array(vc*3);
+  let o=0;
+  for(const g of list){
+    const n=g.attributes.normal, p=g.attributes.position;
+    for(let i=0;i<p.count;i++){ P[o*3]=p.getX(i);P[o*3+1]=p.getY(i);P[o*3+2]=p.getZ(i);
+      Nm[o*3]=n.getX(i);Nm[o*3+1]=n.getY(i);Nm[o*3+2]=n.getZ(i); o++; }
+    g.dispose();
+  }
+  const out=new THREE.BufferGeometry();
+  out.setAttribute('position',new THREE.BufferAttribute(P,3));
+  out.setAttribute('normal',new THREE.BufferAttribute(Nm,3));
+  return out;
 }
 
 // soil overlay (toggle with F)
@@ -53416,13 +53460,16 @@ const RES_COLOR = { water:0x3fa9e0, food:0xd8b24a, clay:0xa8673c, wood:0x6e9c3a,
 // cost, size, jobs, category
 const BTYPES = {
   road:      {name:'Road',            cost:1,   w:1,h:1, cat:'infra', key:'road'},
+  bridge:    {name:'Bridge',          cost:14,  w:1,h:1, cat:'infra', key:'bridge',
+              desc:'The only way across the river. Pave it like a road.',
+              chain:'river crossing' },
   well:      {name:'Well',            cost:60,  w:1,h:1, jobs:0, cat:'civic',
               desc:'Fresh water. Every building within 6 tiles has drinking water.',
               chain:'water: radius 6'},
   cistern:   {name:'Cistern',         cost:220, w:2,h:2, jobs:2, cat:'civic',
               desc:'Holds storm water. Only works if it already has water coverage. Radius 12.',
               chain:'water: needs water cover, radius 12'},
-  aqueduct:  {name:'Aqueduct',        cost:340, w:1,h:1, jobs:1, cat:'civic',
+  aqueduct:  {name:'Aqueduct',        cost:340, w:4,h:1, jobs:1, cat:'civic',
               desc:'Carries water along a road. Must touch a well/cistern. Radius 18.',
               chain:'water: needs well/cistern, radius 18'},
   house:     {name:'House',           cost:100, w:1,h:1, jobs:0, cat:'res',   desc:'Grows from tent to domus as goods are delivered. Pays tax on upgrade.'},
@@ -53540,18 +53587,22 @@ function buildingMesh(b){
   const add=(mesh,x,y,z)=>{ mesh.position.set(x,y,z); mesh.castShadow=true; mesh.receiveShadow=true; g.add(mesh); return mesh; };
   const box=(mat,sx,sy,sz,x,y,z)=>add(new THREE.Mesh(new THREE.BoxGeometry(sx,sy,sz),mat),x,y,z);
   const cyl=(mat,rt,rb,sy,x,y,z,n=10)=>add(new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,sy,n),mat),x,y,z);
-  // pitched tile roof built from overlapping courses
+  // pitched gable roof: two real sloped slabs meeting at a ridge, with eaves overhang
   const tileRoof=(mat,sx,sz,baseY,rise)=>{
-    const steps=7, capW=sx*0.30;
-    for(let i=0;i<steps;i++){
-      const t0=i/steps, t1=(i+1)/steps;
-      const wAt = sx + (capW-sx)*t0;
-      const y = baseY + rise*t0;
-      const sl = Math.hypot((sx-capW)/steps, rise/steps);
-      const m=new THREE.Mesh(new THREE.BoxGeometry(sl*1.06,0.12,sz*1.10), mat);
-      add(m, X-(sx-capW)*0.5 + (sx-capW)/steps*(i+0.5), y+0.02, Z);
-      const m2=m.clone(); add(m2, -((X-(sx-capW)*0.5 + (sx-capW)/steps*(i+0.5))-X) , y+0.02, Z);
+    const capW=sx*0.22;                 // ridge width
+    const span=(sx-capW)/2;             // horizontal run of each slope
+    const ang=Math.atan2(rise,span);
+    const slope=Math.hypot(span,rise);
+    for(const sgn of [-1,1]){
+      const m=new THREE.Mesh(new THREE.BoxGeometry(slope*1.04,0.16,sz*1.14), mat);
+      add(m, X+sgn*span/2, baseY+rise/2, Z);
+      m.rotation.z = -sgn*ang;
     }
+    // ridge cap
+    add(new THREE.Mesh(new THREE.BoxGeometry(capW*1.25,0.13,sz*1.16), mat), X, baseY+rise+0.05, Z);
+    // eaves board along both long edges
+    for(const sgn of [-1,1])
+      add(new THREE.Mesh(new THREE.BoxGeometry(0.10,0.10,sz*1.14), mat), X+sgn*(span+0.06), baseY, Z);
   };
   const flatRoof=(mat,sx,sz,y)=>box(mat,sx,0.18,sz,X,y,Z);
   const plinth=()=>box(M('dark'),w*0.97,0.22,h*0.97,0,0.11,Z*0);
@@ -53566,7 +53617,16 @@ function buildingMesh(b){
       box(mat,r*2.2,0.1,r*2.2,x,yTop,r2); }
   };
 
+  const inner=new THREE.Group(); g.add(inner);
+  const _add=g.add.bind(g); g.add=(m)=>{ inner.add(m); return g; };
   switch(b.type){
+    case 'bridge': {
+      // stone deck with an arch and parapets; only ever spans a single water tile
+      box(M('stone'),w,0.30,h,0,0.30,0);
+      for(const dz of [-1,1]) box(M('stone'),w,0.26,0.16,0,0.55,dz*0.42);
+      box(M('dark'),w*0.5,0.16,0.5,0,0.20,0);
+      for(const s2 of [-1,1]) box(M('cream'),0.14,0.30,0.14,s2*(w*0.5-0.12),0.60,0);
+      break; }
     case 'well': {
       cyl(M('stone'),0.75,0.82,0.6,0,0.3,0,12);
       cyl(M('water'),0.58,0.58,0.1,0,0.62,0,12);
@@ -53690,9 +53750,13 @@ function buildingMesh(b){
         add(new THREE.Mesh(new THREE.BoxGeometry(0.7,0.12,0.3),M('iron')),w/2-0.5,0.75,h/2+0.3);
       }
       if(b.type==='weaver'){
-        box(M('terr'),0.9,0.55,0.06,0,1.0,h*0.44+0.05);
-        for(let i=0;i<3;i++) box(M('gold'),0.2,0.4,0.06,-0.3+i*0.3,1.0,h*0.44+0.09);
-        box(M('wood'),1.2,0.06,0.06,0,1.28,h*0.44);
+        // drying cloth on a pole out front, not a panel over the door
+        const pz=h*0.44+0.42;
+        box(M('wood'),0.08,1.5,0.08,-w*0.34,0.75,pz);
+        box(M('wood'),0.08,1.5,0.08, w*0.34,0.75,pz);
+        box(M('wood'),0.08,0.08,0.08,0,1.48,pz);
+        for(let i=0;i<3;i++)
+          box([M('gold'),M('terr'),M('cream')][i],0.24,0.78,0.05,-0.28+i*0.28,0.82,pz);
       }
       if(b.type==='carpenter'){
         box(M('wood2'),1.1,0.24,0.3,0,0.65,h*0.32);
@@ -53758,8 +53822,8 @@ function buildingMesh(b){
       box(M('dark'),1.5,0.25,1.5,0,3.35,Z);
       for(const [dx,dz] of [[-0.6,-0.6],[0.6,-0.6],[-0.6,0.6],[0.6,0.6]])
         box(M('stone'),0.24,0.6,0.24,dx,3.75,Z+dz);
-      box(M('roof2'),1.7,0.16,1.7,0,4.15,Z);
-      cyl(M('gold'),0.06,0.06,0.7,0,4.55,Z,5);
+      tileRoof(M('roof2'),1.72,1.72,3.48,0.55);
+      cyl(M('gold'),0.07,0.07,0.6,0,4.42,Z,5);
       break; }
     case 'import': {
       box(M('stone'),w*0.9,0.3,h*0.9,0,0.15,Z);
@@ -53774,8 +53838,37 @@ function buildingMesh(b){
       break; }
   }
   if(b.type!=='house'&&b.type!=='watchtower'&&b.type!=='farm'&&b.type!=='farmOlive'&&b.type!=='vineyard'&&b.type!=='park'&&b.type!=='claypit'&&b.type!=='ironMine'&&b.type!=='woodcutter')
-    box(M('stone'),w*0.98,0.22,h*0.98,0,0.11,Z);
+    box(M('stone'),w*0.98,0.62,h*0.98,0,0.02,Z);   // sunk foundation: hides terrain slope gaps
+  g.add=_add;
+  normaliseModel(inner, w, h);
   return g;
+}
+
+// Every model above is authored in whatever local frame was convenient (some from
+// 0, some from w/2, some using h*0.44). Rather than trusting 26 different hand-tuned
+// conventions, measure the finished mesh and canonicalise it:
+//   origin = centre of the footprint, base = ground level.
+// Then placeGroup() can position every building identically and be correct by construction.
+function normaliseModel(inner, fw, fh){
+  // two passes: centre + ground, then contain. scaling perturbs a clamped centre,
+  // so the pass is repeated until it converges.
+  const CLAMP=TILE*1.6;
+  for(let pass=0; pass<2; pass++){
+    inner.updateMatrixWorld(true);
+    const bb=new THREE.Box3().setFromObject(inner);
+    if(!isFinite(bb.min.x)) return;
+    const cx=(bb.min.x+bb.max.x)/2, cz=(bb.min.z+bb.max.z)/2;
+    inner.position.x += Math.max(-CLAMP,Math.min(CLAMP,-cx));
+    inner.position.z += Math.max(-CLAMP,Math.min(CLAMP,-cz));
+    inner.position.y -= bb.min.y;
+    if(!fw || pass===1) break;
+    inner.updateMatrixWorld(true);
+    const b2=new THREE.Box3().setFromObject(inner);
+    const sx=Math.min(1,(fw*1.06)/Math.max(1e-6,b2.max.x-b2.min.x));
+    const sz=Math.min(1,(fh*1.06)/Math.max(1e-6,b2.max.z-b2.min.z));
+    if(sx>=0.999&&sz>=0.999) break;
+    inner.scale.set(sx,1,sz);
+  }
 }
 
 function houseMesh(tier){
@@ -53856,6 +53949,7 @@ function houseMesh(tier){
       add2(g, M('marble'), s*0.62, 3.5, 0.85);
     }
   }
+  normaliseModel(g, TILE, TILE);
   return g;
 }
 function add2(g,mat,x,y,z){
@@ -53868,6 +53962,7 @@ function canPlace(type,x,z){
   if(type==='road'){
     if(!inb(x,z)) return 'out';
     if(cells[idx(x,z)]===T_BLD) return 'building';
+    if(cells[idx(x,z)]===T_WATER) return 'water';
     return null;
   }
   if(!inb(x,z)) return 'out';
@@ -54086,7 +54181,50 @@ function clearArea(x0,z0,x1,z1,keepWater){
   }
 }
 
+// BFS from every building over free land to the nearest road tile, then pave that path.
+// Runs after the starter is laid out and is also safe to re-run (it is idempotent).
+function connectAllBuildings(){
+  const isRoad=(x,z)=>inb(x,z)&&cells[idx(x,z)]===T_ROAD;
+  const K=(x,z)=>(x+','+z);
+  for(const b of blds){
+    const t=BTYPES[b.type];
+    const inside=(x,z)=>x>=b.x&&x<b.x+t.w&&z>=b.z&&z<b.z+t.h;
+    let ok=false;
+    for(let j=-1;j<=t.h&&!ok;j++) for(let i=-1;i<=t.w&&!ok;i++) if(isRoad(b.x+i,b.z+j)) ok=true;
+    if(ok) continue;
+    // BFS from the footprint outwards; record parents so we can walk a real path back
+    const parent=new Map(); const q=[];
+    for(let j=-1;j<=t.h;j++) for(let i=-1;i<=t.w;i++){ const x=b.x+i,z=b.z+j;
+      if(!inb(x,z)) continue; parent.set(K(x,z),null); q.push([x,z]); }
+    let goal=null;
+    for(let qi=0; qi<q.length && !goal; qi++){
+      const [x,z]=q[qi];
+      if(isRoad(x,z)&&!inside(x,z)){ goal=[x,z]; break; }
+      for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]){
+        const nx=x+dx, nz=z+dz, k=K(nx,nz);
+        if(parent.has(k)||!inb(nx,nz)) continue;
+        const c=cells[idx(nx,nz)];
+        if(c===T_WATER||c===T_BLD||c===T_ROCK||c===T_TREE) continue;   // route around obstacles
+        parent.set(k,K(x,z)); q.push([nx,nz]);
+      }
+    }
+    if(!goal) continue;
+    let cur=goal;
+    while(cur){ const [x,z]=cur;
+      if(!inside(x,z) && !isRoad(x,z) && cells[idx(x,z)]===T_EMPTY){ cells[idx(x,z)]=T_ROAD; roadLevel[idx(x,z)]=1; }
+      const p=parent.get(K(x,z)); cur = p? p.split(',').map(Number) : null; }
+  }
+}
+
 function place(type,x,z,free){
+  if(type==='bridge'){
+    if(!inb(x,z)) return false;
+    if(cells[idx(x,z)]!==T_WATER) { msg('A bridge must span the river','bad'); return false; }
+    if(!free && G.money<BTYPES.bridge.cost){ msg('Not enough denarii','bad'); return false; }
+    if(!free) G.money-=BTYPES.bridge.cost;
+    cells[idx(x,z)]=T_ROAD; roadLevel[idx(x,z)]=3; bridgeAt[idx(x,z)]=1;
+    rebuildRoads(); msg('Bridge built','ok'); return true;
+  }
   if(type==='road'){
     const err=canPlace('road',x,z);
     if(err) return false;
@@ -54144,7 +54282,7 @@ function rebuildRoads(){
     let lv=1; const n=idx(x,z);
     let conn=0; for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]){ const xx=x+dx,zz=z+dz;
       if(inb(xx,zz)&&cells[idx(xx,zz)]===T_ROAD) conn++; }
-    roadLevel[n]= conn>=3?2:1;
+    roadLevel[n]= bridgeAt[n] ? 3 : (conn>=3?2:1);
   }
   roadTiles=[];
   for(let z=0;z<N;z++) for(let x=0;x<N;x++) if(cells[idx(x,z)]===T_ROAD) roadTiles.push([x,z]);
@@ -54152,8 +54290,14 @@ function rebuildRoads(){
   for(let z=0;z<N;z++) for(let x=0;x<N;x++){
     if(cells[idx(x,z)]!==T_ROAD) continue;
     const lv=roadLevel[idx(x,z)];
-    const m=new THREE.Mesh(new THREE.BoxGeometry(TILE*0.96,0.16,TILE*0.96), mats[lv]);
-    const [wx,wz]=worldOf(x,z); m.position.set(wx,heightAt(x,z)+0.05,wz);
+    const [wx,wz]=worldOf(x,z);
+    if(lv===3){ // bridge deck spanning the river
+      const m=new THREE.Mesh(new THREE.BoxGeometry(TILE*1.04,0.30,TILE*1.04), mkMat(0x9a8f7a));
+      m.position.set(wx, 0.10, wz);
+      m.receiveShadow=true; m.castShadow=true; roadGroup.add(m); continue;
+    }
+    const m=new THREE.Mesh(new THREE.BoxGeometry(TILE*1.04,0.18,TILE*1.04), mats[lv]);
+    m.position.set(wx,heightAt(x,z)+0.05,wz);
     m.receiveShadow=true; m.castShadow=false; roadGroup.add(m);
   }
 }
@@ -54272,10 +54416,12 @@ function simTick(dt){
   for(const b of blds){
     if(!VICE.includes(b.type)||b.type==='lararium') continue;
     const s2=b.sinLocal||0;
-    const gate = b.type==='opiumden' ? 0.62 : b.type==='alehouse'?0.55:0.75;
+    const gate = b.type==='opiumden' ? 0.88 : b.type==='alehouse'?0.55:0.75;
     if(s2>gate){
       b.evoT=(b.evoT||0)+dt;
-      if(b.evoT>45){
+      // the Lararium is a LATE payoff: a district has to wallow in near-maximal
+      // sin for a full 4 minutes of sim time before it builds its own shrine.
+      if(b.evoT>240 && b.type==='opiumden'){
         b.evoT=0;
         // a district that has wallowed long enough builds its own shrine: the sin
         // finally tips over into a Lararium, which projects it back down hard
@@ -54433,13 +54579,16 @@ function settleMonth(){
 }
 // ---------- SCENE / CAMERA ----------
 let renderer, scene, camera;
-const cam = {dist:46, yaw:0.9, pitch:0.85, tx:0, tz:6};
+// fixed isometric camera: no orbit, no roll, classic 45/45 city-builder view
+const ISO_YAW = Math.PI*0.25;
+const ISO_PITCH = Math.atan(1/Math.SQRT2);   // true isometric 35.264 deg
+const cam = {dist:46, yaw:ISO_YAW, pitch:ISO_PITCH, tx:0, tz:0};
 function init3D(){
   scene=new THREE.Scene();
   scene.background=new THREE.Color(0x9fc4dd);
   scene.fog=new THREE.Fog(0x9fc4dd, 90, 260);
-  camera=new THREE.PerspectiveCamera(50, innerWidth/innerHeight, 0.5, 900);
-  renderer=new THREE.WebGLRenderer({antialias:true});
+  camera=new THREE.PerspectiveCamera(30, innerWidth/innerHeight, 1, 900);  // narrow fov = near-orthographic
+  renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});
   renderer.setSize(innerWidth,innerHeight);
   renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
   renderer.setPixelRatio(Math.min(devicePixelRatio,2));
@@ -54456,11 +54605,24 @@ function init3D(){
   window.addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); });
 }
 function updateCam(dt){
-  const cy=cam.dist*Math.cos(cam.pitch)*Math.sin(cam.yaw);
-  const cx=cam.tx+cam.dist*Math.cos(cam.pitch)*Math.cos(cam.yaw);
-  const cz=cam.tz+cam.dist*Math.sin(cam.pitch);
-  camera.position.lerp(new THREE.Vector3(cx,Math.max(6,cy),cz), 1-Math.pow(0.001,dt));
+  // classic iso: camera sits back along the fixed diagonal, screen-space pans stay aligned
+  const d=cam.dist;
+  const cx=cam.tx + d*Math.cos(cam.pitch)*Math.cos(cam.yaw);
+  const cy=d*Math.sin(cam.pitch);
+  const cz=cam.tz + d*Math.cos(cam.pitch)*Math.sin(cam.yaw);
+  camera.position.set(cx,cy,cz);
+  camera.up.set(0,1,0);
   camera.lookAt(cam.tx,0,cam.tz);
+  cam.cy=cy;
+}
+
+// screen-space pan: map the 2D drag delta to the ground plane along the iso axes
+function panScreen(dx,dy){
+  const k=cam.dist*0.0013;
+  const fx=Math.cos(cam.yaw), fz=-Math.sin(cam.yaw);       // screen "up/down" on the ground
+  const rx=-fz,          rz= fx;                            // screen "right" on the ground
+  cam.tx -= (fx*dy + rx*dx)*k*Math.sin(cam.pitch);
+  cam.tz -= (fz*dy + rz*dx)*k*Math.sin(cam.pitch);
 }
 
 // ---------- raycast ----------
@@ -54500,7 +54662,7 @@ function updateGhost(){
   const mat=new THREE.MeshStandardMaterial({color: err?0xff4444:0x66ff99, transparent:true, opacity:0.35, depthWrite:false});
   const base=new THREE.Mesh(new THREE.BoxGeometry(w,0.12,h),mat); g.add(base);
   if(tool!=='road'){
-    const body=tool==='house'? houseMesh(1) : buildingMesh({type:tool,x:mouseTile.x,z:mouseTile.z});
+    const body=tool==='house'? houseMesh(1) : buildingMesh({type:(tool==='bridge'?'bridge':tool),x:mouseTile.x,z:mouseTile.z});
     body.traverse(o=>{ if(o.isMesh){ o.material=mat; o.castShadow=false; o.receiveShadow=false; } });
     g.add(body);
   }
@@ -54603,6 +54765,7 @@ function refreshBar(){
     let cards='';
     if(g.k==='infra'){
       cards+=`<div class="card infra ${tool==='road'&&!demolishMode?'on':''}" onclick="setTool('road')" title="Roads. Servants can only walk on roads."><span class="cic">\u2591</span><span class="cnm">Road</span><span class="ccost">1</span></div>
+<div class="card infra ${tool==='bridge'&&!demolishMode?'on':''}" onclick="setTool('bridge')" title="Bridge \u2014 the only way across the river. 14 denarii, must span a water tile."><span class="cic">\u2838</span><span class="cnm">Bridge</span><span class="ccost">14</span></div>
       <div class="card infra ${tool==='inspect'&&!demolishMode?'on':''}" onclick="setTool('inspect')" title="Click a building to inspect it"><span class="cic">\u2315</span><span class="cnm">Inspect</span><span class="ccost">&mdash;</span></div>
       <div class="card infra ${demolishMode?'on danger':''}" onclick="setDemolish()" title="Demolish, 30% refund"><span class="cic">\u2715</span><span class="cnm">Demolish</span><span class="ccost">+30%</span></div>`;
     } else cards += g.types.map(k=>tileHTML(k)).join('');
@@ -54671,9 +54834,8 @@ function setSpeed(s){ G.speed=s; renderHUD(); }
 let dragStart=null, dragPaint=false, panning=false, lastX=0,lastY=0, panBtn=false;
 addEventListener('mousemove',e=>{
   lastX=e.clientX; lastY=e.clientY;
-  if(panBtn){ cam.tx-=Math.cos(cam.yaw)*(e.movementX)*cam.dist*0.0016; cam.tz+=Math.sin(cam.yaw)*(e.movementX)*cam.dist*0.0016;
-              cam.tx-=Math.sin(cam.yaw)*(e.movementY)*cam.dist*0.0016; cam.tz-=Math.cos(cam.yaw)*(e.movementY)*cam.dist*0.0016; return; }
-  if(orbiting){ cam.yaw-=e.movementX*0.005; cam.pitch=Math.max(0.18,Math.min(1.5,cam.pitch+e.movementY*0.004)); return; }
+  // right/middle drag = pan (screen-space). no orbit: the iso angle is fixed.
+  if(panBtn||orbiting){ panScreen(e.movementX,e.movementY); return; }
   const t=pickTile(e);
   if(t){ mouseTile=t; onTile=true;
     if(dragPaint&&tool==='road'&&!demolishMode){ place('road',t.x,t.z); }
@@ -54682,12 +54844,12 @@ addEventListener('mousemove',e=>{
 });
 let orbiting=false;
 addEventListener('mousedown',e=>{
-  if(e.button===1||(e.button===0&&e.shiftKey)){ orbiting=true; panBtn=false; return; }
+  if(e.button===1||(e.button===0&&e.shiftKey)){ orbiting=true; panBtn=false; e.preventDefault(); return; }
   if(e.button===2){ panBtn=true; orbiting=false; return; }
   if(e.button===0){
     const t=pickTile(e);
     const b=pickBuilding(e);
-    if(demolishMode){ if(b) demolish(b); else if(t&&cells[idx(t.x,t.z)]===T_ROAD){ cells[idx(t.x,t.z)]=T_EMPTY; roadLevel[idx(t.x,t.z)]=0; rebuildRoads(); } return; }
+    if(demolishMode){ if(b) demolish(b); else if(t&&cells[idx(t.x,t.z)]===T_ROAD){ cells[idx(t.x,t.z)]=T_EMPTY; roadLevel[idx(t.x,t.z)]=0; bridgeAt[idx(t.x,t.z)]=0; rebuildRoads(); } return; }
     if(tool==='inspect'){ sel=b; refreshSel(); return; }
     if(tool==='road'){ dragStart=t; dragPaint=true; if(t) place('road',t.x,t.z); return; }
     if(t){ const r=place(tool,t.x,t.z); if(r) sel=r; refreshSel(); }
@@ -54699,7 +54861,7 @@ addEventListener('mouseup',e=>{
   dragPaint=false; dragStart=null;
 });
 addEventListener('contextmenu',e=>e.preventDefault());
-addEventListener('wheel',e=>{ cam.dist=Math.max(10,Math.min(140,cam.dist*(1+Math.sign(e.deltaY)*0.12))); },{passive:true});
+addEventListener('wheel',e=>{ cam.dist=Math.max(14,Math.min(180,cam.dist*(1+Math.sign(e.deltaY)*0.11))); },{passive:true});
 addEventListener('keydown',e=>{
   const k=e.key.toLowerCase();
   if(k==='q'){ setTool('road'); }
@@ -54709,11 +54871,9 @@ addEventListener('keydown',e=>{
   if(k==='escape'){ sel=null; refreshSel(); }
   if('wasd'.includes(k)&&k.length===1){
     e.preventDefault();
-    const sp=4*cam.dist*0.016, fx=Math.cos(cam.yaw), fz=-Math.sin(cam.yaw);
-    if(k==='w'){cam.tx+=fx*sp;cam.tz+=fz*sp;}
-    if(k==='s'){cam.tx-=fx*sp;cam.tz-=fz*sp;}
-    if(k==='a'){cam.tx-=fz*sp;cam.tz+=fx*sp;}
-    if(k==='d'){cam.tx+=fz*sp;cam.tz-=fx*sp;}
+    // WASD pan in screen space, same axes the mouse drag uses
+    if(k==='w') panScreen(0, 14); if(k==='s') panScreen(0,-14);
+    if(k==='a') panScreen(-14,0); if(k==='d') panScreen(14,0);
   }
   if(k==='g'){ showPaths=!showPaths; msg('Servant paths '+(showPaths?'shown':'hidden')); }
   if(k==='c'){ chainOpen=!chainOpen; renderChains(); }
@@ -54745,8 +54905,7 @@ function loop(now){
 // ---------- BOOT ----------
 function init(){
   // a little river
-  for(let z=0;z<N;z++){ const wx=6+Math.round(Math.sin(z*0.22)*3);
-    for(let i=-1;i<=1;i++){ if(inb(wx+i,z) && cells[idx(wx+i,z)]===T_EMPTY) cells[idx(wx+i,z)]=T_WATER; } }
+  carveRiver();
   for(let i=0;i<300;i++){ const x=Math.floor(Math.random()*N),z=Math.floor(Math.random()*N);
     if(inb(x,z)&&cells[idx(x,z)]===T_EMPTY&&Math.random()<0.1) cells[idx(x,z)]=T_TREE; }
   for(let z=0;z<N;z++){ const x=Math.floor(Math.random()*N); if(inb(x,z)&&cells[idx(x,z)]===T_EMPTY) cells[idx(x,z)]=T_SAND; }
@@ -54797,6 +54956,9 @@ function init(){
   place('smith',C+4,C+18,true);
   place('carpenter',C+10,C+18,true);
   place('weaver',C+0,C+18,true);
+  // --- guarantee road access: pave an entrance spur from every building to the nearest
+  // road, instead of trusting the hand-written layout above to happen to touch one ---
+  connectAllBuildings();
   rebuildRoads();
   fieldTick(0.25);
   msg('A new colony on the Tiber. Roads first, then a market.','');
@@ -54997,7 +55159,11 @@ function avgMood(){
 let fieldOverlay=null, fieldMode=-1;
 const FIELD_MODES=['desirability','mood','sin','crime'];
 function cycleFieldOverlay(){
+  // (fieldMode+1) % (n+1) yields 0..n, so the "off" state was arithmetically
+  // unreachable: mode n existed, mode -1 did not, and mode n fell through to the
+  // crime branch. Map the top of the range back onto off explicitly.
   fieldMode=(fieldMode+1)%(FIELD_MODES.length+1);
+  if(fieldMode>=FIELD_MODES.length) fieldMode=-1;
   if(fieldOverlay){ scene.remove(fieldOverlay); fieldOverlay.traverse(o=>{ if(o.isMesh) o.geometry.dispose(); }); fieldOverlay=null; }
   if(fieldMode>=0) buildFieldOverlay();
   msg(fieldMode>=0? ('Field overlay: '+FIELD_MODES[fieldMode]) : 'Field overlay off');
