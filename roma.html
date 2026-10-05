@@ -53473,6 +53473,9 @@ const BTYPES = {
   opiumden:  {name:'Opium Den',       cost:700,  w:2,h:2, jobs:10,cat:'vice', tax:84,
               desc:'The end of the ladder. Enormous sin, and it ruins everything around it.',
               chain:'sin +0.72 (r10)  ->  tax income'},
+  lararium:  {name:'Lararium',        cost:420,  w:2,h:2, jobs:4, cat:'vice', tax:26,
+              desc:'A shrine the district built for itself. It evolved out of vice, pays a cut to the state, and projects sin back DOWN harder than a temple does.',
+              chain:'sin -0.55 (r11)  +  desire +3 (r9)  ->  tax income  |  evolves at sin > 0.62'},
   watchtower:{name:'Watchtower',      cost:340,  w:1,h:1, jobs:6, cat:'law',
               desc:'Spawns prefects on a fixed timer. They A* to whatever crime the field reports and fight it.',
               chain:'prefect respawns every 18s  ->  patrols the roads'},
@@ -54267,14 +54270,17 @@ function simTick(dt){
   }
   // --- vice evolves out of sustained sin ---
   for(const b of blds){
-    if(b.type!=='alehouse'&&b.type!=='brothel') continue;
+    if(!VICE.includes(b.type)||b.type==='lararium') continue;
     const s2=b.sinLocal||0;
-    const gate = b.type==='alehouse'?0.55:0.75;
+    const gate = b.type==='opiumden' ? 0.62 : b.type==='alehouse'?0.55:0.75;
     if(s2>gate){
       b.evoT=(b.evoT||0)+dt;
       if(b.evoT>45){
         b.evoT=0;
-        const to = b.type==='alehouse'?'gambling':'opiumden';
+        // a district that has wallowed long enough builds its own shrine: the sin
+        // finally tips over into a Lararium, which projects it back down hard
+        const to = b.type==='opiumden' ? 'lararium' : b.type==='alehouse' ? 'gambling' : 'opiumden';
+        if(to===b.type){ b.evoT=0; continue; }
         unregisterSources(b); b.type=to;
         registerSources(b);
         bldGroup.remove(b.mesh); b.mesh=buildingMesh(b); placeGroup(b);
@@ -54355,11 +54361,16 @@ function computeBooks(){
     if(!VICE.includes(b.type)||!b.active) continue;
     const local=Math.max(0,b.sinLocal||0);
     const m=moodAt(b);
-    if(m<-0.55){ b.warn='condemned: the neighbourhood will not tolerate it'; continue; }
+    if(m<-1.15){ b.warn='condemned: the neighbourhood will not tolerate it'; continue; }
     b.warn=null;
     // revenue scales with how much sin is actually around it, times the
     // neighbourhood's tolerance — a contented, sin-free block pays nothing
-    vice += BTYPES[b.type].tax * local * Math.max(0, 0.45+m) * 3.2 * G.taxRate;
+    // tolerance: a mildly unhappy block still does brisk trade, only a genuinely
+    // miserable one stops paying. (Clamped, never sign-flipped — a sin district is
+    // always miserable, so a signed factor would zero out all vice revenue.)
+    const tol = Math.max(0.06, 0.78 + m*0.42);
+    b.tol=tol;
+    vice += BTYPES[b.type].tax * local * tol * 1.7 * G.taxRate;
   }
   G.vice=Math.floor(vice);
   gross += vice;
@@ -54376,8 +54387,12 @@ function computeBooks(){
 function taxTick(dt){
   // continuous accrual so the treasury never feels frozen
   computeBooks();
-  G.money += G.vice * dt * 0.08;     // vice pays straight in
-  G.money -= G.upkeep * dt * 0.10;   // services are paid for continuously
+  // one month is 2.0s of sim time (G.timeAcc>2.0 triggers settleMonth), so a
+  // monthly figure is earned at figure/2 per second. Both sides use the same
+  // conversion, which is what makes G.balance the real arbiter of solvency.
+  const PER_MONTH = 0.5;
+  G.money += G.vice * dt * PER_MONTH;     // vice pays straight in
+  G.money -= G.upkeep * dt * PER_MONTH;   // services are paid for continuously
   if(G.balance < 0){
     // unpaid public services start to rot
     G.unpaid = (G.unpaid||0) + dt*0.02;
@@ -54872,13 +54887,14 @@ const SRC = {
   park:     {desire:{a:6.0, r:7}},
   senate:   {desire:{a:8.0, r:13}},
   // vice: sin out, desirability down
+  lararium:  {sin:{a:-0.55, r:11}, desire:{a:3.0, r:9}},
   alehouse: {sin:{a:0.30, r:7},  desire:{a:-2.6, r:5}},
   gambling: {sin:{a:0.42, r:8},  desire:{a:-3.6, r:6}},
   brothel:  {sin:{a:0.52, r:9},  desire:{a:-4.6, r:7}},
   opiumden: {sin:{a:0.72, r:10}, desire:{a:-6.0, r:8}},
 };
 
-const VICE = ['alehouse','gambling','brothel','opiumden'];
+const VICE = ['alehouse','gambling','brothel','opiumden','lararium'];
 
 function registerSources(b){
   const def=SRC[b.type]; if(!def) return;
@@ -54919,7 +54935,7 @@ function moodTarget(x,z){
   const d=F_DESIRE.at(x,z);
   let m = Math.tanh(d/14 - 0.30);
   m -= shortageAtTile(x,z);
-  m -= Math.min(1,F_SIN.at(x,z))*0.45;
+  m -= Math.min(1,F_SIN.at(x,z))*0.22;
   return Math.max(-1,Math.min(1,m));
 }
 function shortageAtTile(x,z){
@@ -54956,7 +54972,7 @@ function fieldTick(dt){
     const d=F_DESIRE.cache[i];
     let m=Math.tanh(d/14-0.30);
     m-=shortageAtTile(x,z);
-    m-=Math.min(1,F_SIN.cache[i])*0.45;
+    m-=Math.min(1,F_SIN.cache[i])*0.22;
     moodState[i] += (Math.max(-1,Math.min(1,m)) - moodState[i])*k;
   }
   F_SIN.clampAll();
@@ -55091,26 +55107,31 @@ function spawnCollector(){
   const a=newAgent('collector',e.x,e.z); agents.push(a); planCollector(a);
 }
 function planCollector(a){
-  a.depositing=false;
-  // greedy: keep hitting the richest reachable debtor until nothing is left worth walking to
-  let cur=a, stops=0, total=0;
-  while(stops++<14){
-    let best=null,bv=-1;
+  // Greedy circuit: no purse ceiling at all. Walk the streets and take every
+  // penny anyone owes, richest debtor first, until the road network has nothing
+  // left worth walking to. Then carry the whole purse home in one go.
+  a.legs=[]; a.visit=null; a.done=false; a.depositLeg=false;
+  const taken=new Set();
+  let cur={x:a.x,z:a.z};
+  for(let stops=0; stops<16; stops++){
+    let best=null,bv=0;
     for(const b of blds){
       if(b.type!=='house'||!b.active) continue;
-      if((b.debt||0)<=0.5) continue;
+      if((b.debt||0)<=0.5 || taken.has(b)) continue;
       const be=entranceOf(b); if(!be) continue;
       if(!astar(cur.x,cur.z,be.x,be.z)) continue;
       if(b.debt>bv){ bv=b.debt; best=b; }
     }
     if(!best) break;
-    const be=entranceOf(best);
-    if(!sendAgent(a,be.x,be.z)) break;
-    if(a.path) for(const [px,pz] of a.path) traffic[idx(px,pz)] += 1;
-    a.visit=best; a.legs=a.legs||[]; a.legs.push(best); total+=bv;
-    break; // one stop per plan; re-plan from wherever we end up (greedy walk)
+    taken.add(best);
+    a.legs.push(best);
+    cur=entranceOf(best);
   }
-  a.deposit=true;
+  if(!a.legs.length) return false;
+  const first=entranceOf(a.legs[0]);
+  if(!sendAgent(a,first.x,first.z)){ a.legs=[]; return false; }
+  a.visit=a.legs[0]; a.done=false;
+  return true;
 }
 function updateCollectors(dt){
   if(collectors().length<MAX_COLL && Math.random()<dt*0.22){
@@ -55118,28 +55139,41 @@ function updateCollectors(dt){
   }
   for(const a of collectors()){
     a.life+=dt;
+    // arriving at a stop: take everything that house owes, then head for the next
     if(!a.path){
-      if(a.visit && a.pi>=0 && !a.done){
-        // arrived: collect everything owed
+      if(a.visit && !a.done){
         const b=a.visit;
-        if(b && (b.debt||0)>0.5){ a.purse+=b.debt; b.debt=0; b.lastPaid=simClock;
-          msg('A tax collector took '+Math.round(a.purse)+' denarii','ok',true); }
+        if(b && (b.debt||0)>0.5){
+          const got=b.debt; a.purse+=got; b.debt=0; b.dueAge=0; b.lastPaid=simClock;
+          msg('A collector took '+Math.round(got)+' denarii from a '+HOUSE_TIERS[b.tier].name.toLowerCase(),'ok',true);
+        }
         a.done=true;
+        a.legs.shift();
+        a.visit=a.legs[0]||null;
+        if(a.visit){
+          const be=entranceOf(a.visit);
+          // a thief shook this one off mid-route: replan from here
+          if(be && sendAgent(a,be.x,be.z)) { a.done=false; continue; }
+          a.visit=null;
+        }
       }
-      if(a.done){
+      // circuit finished (or nothing left reachable): carry the purse to the market
+      if(a.purse>0){
         const m=anyMarket(), e=m&&entranceOf(m);
-        if(e && a.purse>0){ if(sendAgent(a,e.x,e.z)){ a.depositLeg=true; continue; } }
-        a.purse=0; a.done=false; a.visit=null;
-        if(collectors().length>1) killAgent(a);   // retire idle ones
-        continue;
+        if(e && sendAgent(a,e.x,e.z)){ a.depositLeg=true; continue; }
+        // no road home: the state takes the money directly rather than losing it
+        G.money+=a.purse; G.taxHauled=(G.taxHauled||0)+a.purse; a.purse=0;
       }
-      planCollector(a);
-      if(!a.path) continue;
+      a.depositLeg=false; a.done=false; a.visit=null; a.legs=[];
+      if(collectors().length>1 && !planCollector(a)) killAgent(a);   // idle: retire
+      continue;
     }
     const arrived=stepAgent(a,dt);
     if(arrived && a.depositLeg){
-      if(a.purse>0){ G.money+=a.purse; G.taxHauled=(G.taxHauled||0)+a.purse; a.purse=0; }
-      a.depositLeg=false; a.done=false; a.visit=null; a.path=null;
+      if(a.purse>0){ G.money+=a.purse; G.taxHauled=(G.taxHauled||0)+a.purse;
+        msg('The treasury received '+Math.round(a.purse)+' denarii','good',true);
+        a.purse=0; }
+      a.depositLeg=false; a.done=false; a.visit=null; a.legs=[];
     }
   }
 }
@@ -55174,10 +55208,14 @@ function updateCriminals(dt){
     // ambush: anything that steps on my tile
     for(const c of collectors()){
       if(Math.abs(c.x-a.x)<=1 && Math.abs(c.z-a.z)<=1){
-        if(c.purse>0){ G.money-=c.purse; G.stolen=(G.stolen||0)+c.purse;
+        // the purse was never credited to the treasury, so a theft simply
+        // destroys that revenue rather than punching a hole in the books
+        if(c.purse>0){ G.stolen=(G.stolen||0)+c.purse;
           msg('A thief robbed the tax collector of '+Math.round(c.purse)+' denarii!','bad');
           F_DESIRE.addDecay(a.x,a.z,-3.0,6,45);
-          c.purse=0; c.done=false; c.visit=null; c.path=null;
+          // robbed clean: the thief takes the ENTIRE purse. The collector keeps
+          // their remaining route and carries on with an empty bag.
+          c.purse=0; c.done=false; c.path=null;
           a.hp-=15; a.cd=2.2;
         } else a.hp-=6;
       }

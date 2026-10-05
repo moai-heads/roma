@@ -30,6 +30,7 @@ A 3D Caesar III style city builder that runs in the browser.
 | `G` | show servant paths |
 | `F` | fertile soil overlay |
 | `C` | production chain chart |
+| `V` | cycle field overlay: desirability / mood / sin / crime |
 | `space` | pause |
 
 Built with three.js (inlined) — no build step, no external requests.
@@ -75,3 +76,29 @@ recovered by the state at 85%. Criminals stand in the street and hit whoever wal
 reach — a collector loses the entire purse, and supply carts get robbed in lawless
 corners, which starves the houses they were serving. **Watchtowers** respawn prefects
 every 18s; they A\* to the crime the field reports and fight, and they can die.
+
+## The vice / law layer
+
+Four buildings sit in the **Vice** category and pay a cut straight to the treasury,
+scaling with how much sin is actually around them and how tolerant the neighbourhood is:
+
+`Alehouse → Gambling Den → Opium Den`, each step gated on sustained local sin.
+
+- **Opium Den that stays in sin > 0.62 for 45s becomes a Lararium** — a shrine the
+  district built for itself. It projects **sin −0.55 over r11** (harder than a temple's
+  −0.34) and +3 desire, and still pays tax. Two Larariums will scrub a district clean.
+- A vice block whose mood falls below **−1.15** is **condemned** and pays nothing.
+
+**Tax collectors** walk the road graph greedily, richest debtor first, up to 16 stops per
+circuit, taking each household's whole debt into their purse — there is no purse ceiling,
+they carry everything — then deliver it to the Market. If a thief empties the purse the
+collector keeps walking the rest of their route with an empty bag.
+
+**Criminals** never hunt. They stand on a road tile chosen by `crime × traffic` and hit
+whatever steps on it: a collector loses their **entire** purse, a supply cart is
+destroyed. Robberies and cart thefts drop negative desirability sources.
+
+**Prefects** respawn on a fixed 18s timer per Watchtower, A* to the nearest reported
+criminal and brawl in attrition combat. A prefect can die. A criminal killed drops a
+**negative influence on the crime field** — the area genuinely clears out for a while.
+There is no law field and no crime ceiling; the runaway is the point.

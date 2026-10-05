@@ -111,14 +111,17 @@ function simTick(dt){
   }
   // --- vice evolves out of sustained sin ---
   for(const b of blds){
-    if(b.type!=='alehouse'&&b.type!=='brothel') continue;
+    if(!VICE.includes(b.type)||b.type==='lararium') continue;
     const s2=b.sinLocal||0;
-    const gate = b.type==='alehouse'?0.55:0.75;
+    const gate = b.type==='opiumden' ? 0.62 : b.type==='alehouse'?0.55:0.75;
     if(s2>gate){
       b.evoT=(b.evoT||0)+dt;
       if(b.evoT>45){
         b.evoT=0;
-        const to = b.type==='alehouse'?'gambling':'opiumden';
+        // a district that has wallowed long enough builds its own shrine: the sin
+        // finally tips over into a Lararium, which projects it back down hard
+        const to = b.type==='opiumden' ? 'lararium' : b.type==='alehouse' ? 'gambling' : 'opiumden';
+        if(to===b.type){ b.evoT=0; continue; }
         unregisterSources(b); b.type=to;
         registerSources(b);
         bldGroup.remove(b.mesh); b.mesh=buildingMesh(b); placeGroup(b);
@@ -199,11 +202,16 @@ function computeBooks(){
     if(!VICE.includes(b.type)||!b.active) continue;
     const local=Math.max(0,b.sinLocal||0);
     const m=moodAt(b);
-    if(m<-0.55){ b.warn='condemned: the neighbourhood will not tolerate it'; continue; }
+    if(m<-1.15){ b.warn='condemned: the neighbourhood will not tolerate it'; continue; }
     b.warn=null;
     // revenue scales with how much sin is actually around it, times the
     // neighbourhood's tolerance — a contented, sin-free block pays nothing
-    vice += BTYPES[b.type].tax * local * Math.max(0, 0.45+m) * 3.2 * G.taxRate;
+    // tolerance: a mildly unhappy block still does brisk trade, only a genuinely
+    // miserable one stops paying. (Clamped, never sign-flipped — a sin district is
+    // always miserable, so a signed factor would zero out all vice revenue.)
+    const tol = Math.max(0.06, 0.78 + m*0.42);
+    b.tol=tol;
+    vice += BTYPES[b.type].tax * local * tol * 1.7 * G.taxRate;
   }
   G.vice=Math.floor(vice);
   gross += vice;
@@ -220,8 +228,12 @@ function computeBooks(){
 function taxTick(dt){
   // continuous accrual so the treasury never feels frozen
   computeBooks();
-  G.money += G.vice * dt * 0.08;     // vice pays straight in
-  G.money -= G.upkeep * dt * 0.10;   // services are paid for continuously
+  // one month is 2.0s of sim time (G.timeAcc>2.0 triggers settleMonth), so a
+  // monthly figure is earned at figure/2 per second. Both sides use the same
+  // conversion, which is what makes G.balance the real arbiter of solvency.
+  const PER_MONTH = 0.5;
+  G.money += G.vice * dt * PER_MONTH;     // vice pays straight in
+  G.money -= G.upkeep * dt * PER_MONTH;   // services are paid for continuously
   if(G.balance < 0){
     // unpaid public services start to rot
     G.unpaid = (G.unpaid||0) + dt*0.02;

@@ -12,11 +12,11 @@ console.log(JSON.stringify(await p.evaluate(()=>{
   place('opiumden',C+8,C+11,true);
   const out=[];
   for(let k=0;k<5;k++){
-    for(let i=0;i<900;i++){ simTick(0.16); updateCarts(0.06); }
+    for(let i=0;i<1400;i++){ simTick(0.16); updateCarts(0.06); }
     out.push({crim:criminals().length,pref:prefects().length,slain:G.slain||0,
       stolen:Math.round(G.stolen||0),robbed:G.robbed||0,coll:collectors().length,
       vice:G.vice,m:Math.round(G.money),crime:Math.round(F_CRIME.at(C+4,C+11)*100)/100,
-      evo:blds.filter(x=>x.type==='gambling'||x.type==='opiumden').map(x=>x.type).join(','),
+      evo:blds.filter(x=>/gambling|opiumden|brothel|lararium/.test(x.type)).map(x=>x.type).join(','),
       decaying:F_DESIRE.decaying.length});
   }
   return out;
