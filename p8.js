@@ -191,7 +191,11 @@ function avgMood(){
 let fieldOverlay=null, fieldMode=-1;
 const FIELD_MODES=['desirability','mood','sin','crime'];
 function cycleFieldOverlay(){
+  // (fieldMode+1) % (n+1) yields 0..n, so the "off" state was arithmetically
+  // unreachable: mode n existed, mode -1 did not, and mode n fell through to the
+  // crime branch. Map the top of the range back onto off explicitly.
   fieldMode=(fieldMode+1)%(FIELD_MODES.length+1);
+  if(fieldMode>=FIELD_MODES.length) fieldMode=-1;
   if(fieldOverlay){ scene.remove(fieldOverlay); fieldOverlay.traverse(o=>{ if(o.isMesh) o.geometry.dispose(); }); fieldOverlay=null; }
   if(fieldMode>=0) buildFieldOverlay();
   msg(fieldMode>=0? ('Field overlay: '+FIELD_MODES[fieldMode]) : 'Field overlay off');

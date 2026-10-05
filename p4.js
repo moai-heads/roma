@@ -85,7 +85,50 @@ function clearArea(x0,z0,x1,z1,keepWater){
   }
 }
 
+// BFS from every building over free land to the nearest road tile, then pave that path.
+// Runs after the starter is laid out and is also safe to re-run (it is idempotent).
+function connectAllBuildings(){
+  const isRoad=(x,z)=>inb(x,z)&&cells[idx(x,z)]===T_ROAD;
+  const K=(x,z)=>(x+','+z);
+  for(const b of blds){
+    const t=BTYPES[b.type];
+    const inside=(x,z)=>x>=b.x&&x<b.x+t.w&&z>=b.z&&z<b.z+t.h;
+    let ok=false;
+    for(let j=-1;j<=t.h&&!ok;j++) for(let i=-1;i<=t.w&&!ok;i++) if(isRoad(b.x+i,b.z+j)) ok=true;
+    if(ok) continue;
+    // BFS from the footprint outwards; record parents so we can walk a real path back
+    const parent=new Map(); const q=[];
+    for(let j=-1;j<=t.h;j++) for(let i=-1;i<=t.w;i++){ const x=b.x+i,z=b.z+j;
+      if(!inb(x,z)) continue; parent.set(K(x,z),null); q.push([x,z]); }
+    let goal=null;
+    for(let qi=0; qi<q.length && !goal; qi++){
+      const [x,z]=q[qi];
+      if(isRoad(x,z)&&!inside(x,z)){ goal=[x,z]; break; }
+      for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]){
+        const nx=x+dx, nz=z+dz, k=K(nx,nz);
+        if(parent.has(k)||!inb(nx,nz)) continue;
+        const c=cells[idx(nx,nz)];
+        if(c===T_WATER||c===T_BLD||c===T_ROCK||c===T_TREE) continue;   // route around obstacles
+        parent.set(k,K(x,z)); q.push([nx,nz]);
+      }
+    }
+    if(!goal) continue;
+    let cur=goal;
+    while(cur){ const [x,z]=cur;
+      if(!inside(x,z) && !isRoad(x,z) && cells[idx(x,z)]===T_EMPTY){ cells[idx(x,z)]=T_ROAD; roadLevel[idx(x,z)]=1; }
+      const p=parent.get(K(x,z)); cur = p? p.split(',').map(Number) : null; }
+  }
+}
+
 function place(type,x,z,free){
+  if(type==='bridge'){
+    if(!inb(x,z)) return false;
+    if(cells[idx(x,z)]!==T_WATER) { msg('A bridge must span the river','bad'); return false; }
+    if(!free && G.money<BTYPES.bridge.cost){ msg('Not enough denarii','bad'); return false; }
+    if(!free) G.money-=BTYPES.bridge.cost;
+    cells[idx(x,z)]=T_ROAD; roadLevel[idx(x,z)]=3; bridgeAt[idx(x,z)]=1;
+    rebuildRoads(); msg('Bridge built','ok'); return true;
+  }
   if(type==='road'){
     const err=canPlace('road',x,z);
     if(err) return false;
@@ -143,7 +186,7 @@ function rebuildRoads(){
     let lv=1; const n=idx(x,z);
     let conn=0; for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]){ const xx=x+dx,zz=z+dz;
       if(inb(xx,zz)&&cells[idx(xx,zz)]===T_ROAD) conn++; }
-    roadLevel[n]= conn>=3?2:1;
+    roadLevel[n]= bridgeAt[n] ? 3 : (conn>=3?2:1);
   }
   roadTiles=[];
   for(let z=0;z<N;z++) for(let x=0;x<N;x++) if(cells[idx(x,z)]===T_ROAD) roadTiles.push([x,z]);
@@ -151,8 +194,14 @@ function rebuildRoads(){
   for(let z=0;z<N;z++) for(let x=0;x<N;x++){
     if(cells[idx(x,z)]!==T_ROAD) continue;
     const lv=roadLevel[idx(x,z)];
-    const m=new THREE.Mesh(new THREE.BoxGeometry(TILE*0.96,0.16,TILE*0.96), mats[lv]);
-    const [wx,wz]=worldOf(x,z); m.position.set(wx,heightAt(x,z)+0.05,wz);
+    const [wx,wz]=worldOf(x,z);
+    if(lv===3){ // bridge deck spanning the river
+      const m=new THREE.Mesh(new THREE.BoxGeometry(TILE*1.04,0.30,TILE*1.04), mkMat(0x9a8f7a));
+      m.position.set(wx, 0.10, wz);
+      m.receiveShadow=true; m.castShadow=true; roadGroup.add(m); continue;
+    }
+    const m=new THREE.Mesh(new THREE.BoxGeometry(TILE*1.04,0.18,TILE*1.04), mats[lv]);
+    m.position.set(wx,heightAt(x,z)+0.05,wz);
     m.receiveShadow=true; m.castShadow=false; roadGroup.add(m);
   }
 }

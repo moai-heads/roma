@@ -42,6 +42,7 @@ const depot = { food:0 }; // granary storage
 const cells = new Uint8Array(N*N);      // T_*
 const bldAt = new Int16Array(N*N).fill(-1);
 const roadLevel = new Uint8Array(N*N);
+const bridgeAt  = new Uint8Array(N*N);   // road tiles spanning the river
 
 let terrainGroup, roadGroup, bldGroup, cartGroup, decoGroup;
 let roadTiles=[];
@@ -67,7 +68,10 @@ function buildTerrain(){
   for(let i=0;i<p.count;i++){
     const wx=p.getX(i), wz=p.getZ(i);
     const gx=Math.floor(wx/TILE+N/2), gz=Math.floor(wz/TILE+N/2);
-    p.setY(i, (inb(gx,gz)? heightAt(gx,gz):0) - 0.15);
+    let h = inb(gx,gz)? heightAt(gx,gz) : 0;
+    // carve the riverbed down where there is water
+    if(inb(gx,gz) && cells[idx(gx,gz)]===T_WATER) h -= 0.62;
+    p.setY(i, h - 0.15);
   }
   g.computeVertexNormals();
   const cols=[];
@@ -80,11 +84,11 @@ function buildTerrain(){
       const cc=cells[idx(gx,gz)], f=soil[idx(gx,gz)];
       if(cc===T_WATER){
         const d=heightAt(gx,gz);
-        c=new THREE.Color().setHSL(0.55,0.42,0.20+d*0.03);
+        c=new THREE.Color().setHSL(0.55,0.45,0.13+d*0.03);
       } else if(cc===T_SAND){ c=new THREE.Color(0xc9b47a); }
       else {
         // fertile ground is richer / more yellow-green, barren is pale grey-brown
-        c=new THREE.Color().setHSL(0.22-0.06*(1-f), 0.16+0.34*f, 0.20+0.16*f);
+        c=new THREE.Color().setHSL(0.235-0.055*(1-f), 0.30+0.36*f, 0.185+0.15*f);
         const h=heightAt(gx,gz);
         c.offsetHSL(0,0,-h*0.09);
         // patchy noise so it doesn't look like a flat wash
@@ -105,24 +109,64 @@ function buildTerrain(){
   decoTerrain();
 }
 
-// animated water plane
+// ---------- river: real water tiles only ----------
 let waterMesh;
+function carveRiver(){
+  // a meandering river across the map, 2-3 tiles wide, generated BEFORE terrain build
+  // the river runs down the far west margin, clear of the founding site (x>=20),
+  // so the starting city is never split. the player bridges it to expand west.
+  let cx=6+Math.sin(Math.random()*6.28)*2, amp=7, ph=Math.random()*6.28;
+  for(let z=0;z<N;z++){
+    cx += Math.sin(z*0.085+ph)*0.42; cx += (9-cx)*0.012;
+    cx=Math.max(4,Math.min(11,cx));
+    const w=2+Math.sin(z*0.21+ph)*0.9;
+    for(let i=-3;i<=3;i++){
+      const x=Math.round(cx+i);
+      if(inb(x,z) && Math.abs(i)<=w) cells[idx(x,z)]=T_WATER;
+    }
+  }
+  // banks get a sand fringe so the shoreline reads properly
+  for(let z=0;z<N;z++) for(let x=0;x<N;x++){
+    if(cells[idx(x,z)]!==T_EMPTY) continue;
+    for(let j=-1;j<=1;j++) for(let i=-1;i<=1;i++){
+      if(inb(x+i,z+j)&&cells[idx(x+i,z+j)]===T_WATER){ cells[idx(x,z)]=T_SAND; j=9; break; }
+    }
+  }
+}
+
 function buildWater(){
-  const g=new THREE.PlaneGeometry(N*TILE*1.4, N*TILE*1.4, 90,90);
-  g.rotateX(-Math.PI/2);
-  const m=new THREE.MeshStandardMaterial({color:0x2b5f86, roughness:0.16, metalness:0.35,
-    transparent:true, opacity:0.86});
-  m.onBeforeCompile=sh=>{
-    sh.uniforms.uT={value:0};
-    waterMesh.userData.sh=sh;
-    sh.vertexShader='uniform float uT;\n'+sh.vertexShader.replace('#include <begin_vertex>',
-      '#include <begin_vertex>\n transformed.y += sin(position.x*0.22+uT*1.3)*0.06 + cos(position.z*0.19+uT)*0.05;');
-    sh.fragmentShader=sh.fragmentShader.replace('#include <color_fragment>',
-      '#include <color_fragment>\n diffuseColor.rgb *= 0.9+0.2*sin(vViewPosition.x*0.6+vViewPosition.z*0.4);');
-  };
-  waterMesh=new THREE.Mesh(g,m);
-  waterMesh.position.y=0.32;
+  waterMesh=new THREE.Group();
+  // one animated quad per water tile, sitting at the local terrain height
+  const qs=[];
+  for(let z=0;z<N;z++) for(let x=0;x<N;x++){
+    if(cells[idx(x,z)]!==T_WATER) continue;
+    const q=new THREE.PlaneGeometry(TILE,TILE,2,2); q.rotateX(-Math.PI/2);
+    const pos=q.attributes.position;
+    for(let i=0;i<pos.count;i++) pos.setY(i, heightAt(x,z)-0.30);
+    qs.push(q);
+  }
+  const m=new THREE.MeshStandardMaterial({color:0x2f6a92, roughness:0.18, metalness:0.30, flatShading:true});
+  waterMesh=new THREE.Mesh(mergeGeos(qs),m);
+  waterMesh.receiveShadow=true;
   scene.add(waterMesh);
+}
+
+// merge a list of geometries (same material) into one buffer
+function mergeGeos(list){
+  let vc=0;
+  for(const g of list) vc+=g.attributes.position.count;
+  const P=new Float32Array(vc*3), Nm=new Float32Array(vc*3);
+  let o=0;
+  for(const g of list){
+    const n=g.attributes.normal, p=g.attributes.position;
+    for(let i=0;i<p.count;i++){ P[o*3]=p.getX(i);P[o*3+1]=p.getY(i);P[o*3+2]=p.getZ(i);
+      Nm[o*3]=n.getX(i);Nm[o*3+1]=n.getY(i);Nm[o*3+2]=n.getZ(i); o++; }
+    g.dispose();
+  }
+  const out=new THREE.BufferGeometry();
+  out.setAttribute('position',new THREE.BufferAttribute(P,3));
+  out.setAttribute('normal',new THREE.BufferAttribute(Nm,3));
+  return out;
 }
 
 // soil overlay (toggle with F)

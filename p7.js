@@ -56,6 +56,7 @@ function refreshBar(){
     let cards='';
     if(g.k==='infra'){
       cards+=`<div class="card infra ${tool==='road'&&!demolishMode?'on':''}" onclick="setTool('road')" title="Roads. Servants can only walk on roads."><span class="cic">\u2591</span><span class="cnm">Road</span><span class="ccost">1</span></div>
+<div class="card infra ${tool==='bridge'&&!demolishMode?'on':''}" onclick="setTool('bridge')" title="Bridge \u2014 the only way across the river. 14 denarii, must span a water tile."><span class="cic">\u2838</span><span class="cnm">Bridge</span><span class="ccost">14</span></div>
       <div class="card infra ${tool==='inspect'&&!demolishMode?'on':''}" onclick="setTool('inspect')" title="Click a building to inspect it"><span class="cic">\u2315</span><span class="cnm">Inspect</span><span class="ccost">&mdash;</span></div>
       <div class="card infra ${demolishMode?'on danger':''}" onclick="setDemolish()" title="Demolish, 30% refund"><span class="cic">\u2715</span><span class="cnm">Demolish</span><span class="ccost">+30%</span></div>`;
     } else cards += g.types.map(k=>tileHTML(k)).join('');
@@ -124,9 +125,9 @@ function setSpeed(s){ G.speed=s; renderHUD(); }
 let dragStart=null, dragPaint=false, panning=false, lastX=0,lastY=0, panBtn=false;
 addEventListener('mousemove',e=>{
   lastX=e.clientX; lastY=e.clientY;
-  if(panBtn){ cam.tx-=Math.cos(cam.yaw)*(e.movementX)*cam.dist*0.0016; cam.tz+=Math.sin(cam.yaw)*(e.movementX)*cam.dist*0.0016;
-              cam.tx-=Math.sin(cam.yaw)*(e.movementY)*cam.dist*0.0016; cam.tz-=Math.cos(cam.yaw)*(e.movementY)*cam.dist*0.0016; return; }
-  if(orbiting){ cam.yaw-=e.movementX*0.005; cam.pitch=Math.max(0.18,Math.min(1.5,cam.pitch+e.movementY*0.004)); return; }
+  // right/middle drag = pan (screen-space). no orbit: the iso angle is fixed.
+  if(rmbDown && (Math.abs(e.clientX-rmbDown.x)>4 || Math.abs(e.clientY-rmbDown.y)>4)) rmbMoved=true;
+  if(panBtn||orbiting){ panScreen(e.movementX,e.movementY); return; }
   const t=pickTile(e);
   if(t){ mouseTile=t; onTile=true;
     if(dragPaint&&tool==='road'&&!demolishMode){ place('road',t.x,t.z); }
@@ -134,39 +135,45 @@ addEventListener('mousemove',e=>{
   updateGhost();
 });
 let orbiting=false;
+let rmbDown=null, rmbMoved=false;
 addEventListener('mousedown',e=>{
-  if(e.button===1||(e.button===0&&e.shiftKey)){ orbiting=true; panBtn=false; return; }
-  if(e.button===2){ panBtn=true; orbiting=false; return; }
+  if(e.button===1||(e.button===0&&e.shiftKey)){ orbiting=true; panBtn=false; e.preventDefault(); return; }
+  if(e.button===2){ panBtn=true; orbiting=false; rmbDown={x:e.clientX,y:e.clientY}; rmbMoved=false; return; }
   if(e.button===0){
     const t=pickTile(e);
     const b=pickBuilding(e);
-    if(demolishMode){ if(b) demolish(b); else if(t&&cells[idx(t.x,t.z)]===T_ROAD){ cells[idx(t.x,t.z)]=T_EMPTY; roadLevel[idx(t.x,t.z)]=0; rebuildRoads(); } return; }
-    if(tool==='inspect'){ sel=b; refreshSel(); return; }
+    if(demolishMode){ if(b) demolish(b); else if(t&&cells[idx(t.x,t.z)]===T_ROAD){ cells[idx(t.x,t.z)]=T_EMPTY; roadLevel[idx(t.x,t.z)]=0; bridgeAt[idx(t.x,t.z)]=0; rebuildRoads(); } return; }
+    if(tool==='inspect'||!tool){ sel=b; refreshSel(); return; }   // neutral left-click = inspect
     if(tool==='road'){ dragStart=t; dragPaint=true; if(t) place('road',t.x,t.z); return; }
     if(t){ const r=place(tool,t.x,t.z); if(r) sel=r; refreshSel(); }
   }
 });
 addEventListener('mouseup',e=>{
-  if(e.button===2) panBtn=false;
+  if(e.button===2){
+    // a right-click that never turned into a drag means "put me back on neutral"
+    if(rmbDown && !rmbMoved) setNeutral();
+    rmbDown=null; panBtn=false;
+  }
   if(e.button===1) orbiting=false;
   dragPaint=false; dragStart=null;
 });
 addEventListener('contextmenu',e=>e.preventDefault());
-addEventListener('wheel',e=>{ cam.dist=Math.max(10,Math.min(140,cam.dist*(1+Math.sign(e.deltaY)*0.12))); },{passive:true});
+addEventListener('wheel',e=>{ cam.dist=Math.max(14,Math.min(180,cam.dist*(1+Math.sign(e.deltaY)*0.11))); },{passive:true});
 addEventListener('keydown',e=>{
   const k=e.key.toLowerCase();
   if(k==='q'){ setTool('road'); }
   if(k==='e'){ setTool('inspect'); }
-  if(k==='x'){ demolishMode=!demolishMode; refreshBar(); }
+  if(k==='n'){ setNeutral(); }
+  if(k==='x'){ setDemolish(); }
   if(k===' '){ e.preventDefault(); setSpeed(G.speed===0?1:0); }
-  if(k==='escape'){ sel=null; refreshSel(); }
-  if('wasd'.includes(k)&&k.length===1){
+  if(k==='escape'){ setNeutral(); sel=null; refreshSel(); }
+  // WASD and the arrow keys both pan in screen space, on the same axes as the mouse drag
+  // y is DOWN here, matching panScreen/panKey. W = view pans up = world slides down.
+  const PAN={w:[0,1],s:[0,-1],a:[-1,0],d:[1,0],arrowup:[0,1],arrowdown:[0,-1],arrowleft:[-1,0],arrowright:[1,0]}[k];
+  if(PAN){
     e.preventDefault();
-    const sp=4*cam.dist*0.016, fx=Math.cos(cam.yaw), fz=-Math.sin(cam.yaw);
-    if(k==='w'){cam.tx+=fx*sp;cam.tz+=fz*sp;}
-    if(k==='s'){cam.tx-=fx*sp;cam.tz-=fz*sp;}
-    if(k==='a'){cam.tx-=fz*sp;cam.tz+=fx*sp;}
-    if(k==='d'){cam.tx+=fz*sp;cam.tz-=fx*sp;}
+    const step=e.shiftKey?2.6:1;
+    panKey(PAN[0]*step, PAN[1]*step);
   }
   if(k==='g'){ showPaths=!showPaths; msg('Servant paths '+(showPaths?'shown':'hidden')); }
   if(k==='c'){ chainOpen=!chainOpen; renderChains(); }
@@ -198,8 +205,7 @@ function loop(now){
 // ---------- BOOT ----------
 function init(){
   // a little river
-  for(let z=0;z<N;z++){ const wx=6+Math.round(Math.sin(z*0.22)*3);
-    for(let i=-1;i<=1;i++){ if(inb(wx+i,z) && cells[idx(wx+i,z)]===T_EMPTY) cells[idx(wx+i,z)]=T_WATER; } }
+  carveRiver();
   for(let i=0;i<300;i++){ const x=Math.floor(Math.random()*N),z=Math.floor(Math.random()*N);
     if(inb(x,z)&&cells[idx(x,z)]===T_EMPTY&&Math.random()<0.1) cells[idx(x,z)]=T_TREE; }
   for(let z=0;z<N;z++){ const x=Math.floor(Math.random()*N); if(inb(x,z)&&cells[idx(x,z)]===T_EMPTY) cells[idx(x,z)]=T_SAND; }
@@ -250,6 +256,9 @@ function init(){
   place('smith',C+4,C+18,true);
   place('carpenter',C+10,C+18,true);
   place('weaver',C+0,C+18,true);
+  // --- guarantee road access: pave an entrance spur from every building to the nearest
+  // road, instead of trusting the hand-written layout above to happen to touch one ---
+  connectAllBuildings();
   rebuildRoads();
   fieldTick(0.25);
   msg('A new colony on the Tiber. Roads first, then a market.','');

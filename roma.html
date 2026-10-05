@@ -77,32 +77,34 @@ button{font-family:inherit}
 #help b{color:#f0d9a0}
 kbd{background:#3a2e1e;border:1px solid #6a5436;border-radius:3px;padding:0 4px;color:#f0d9a0}
 
-#ghostinfo{position:fixed;left:50%;transform:translateX(-50%);bottom:124px;min-width:300px;text-align:center;z-index:11;background:rgba(18,14,9,.92);
+#ghostinfo{display:none;position:fixed;left:50%;transform:translateX(-50%);bottom:124px;min-width:300px;text-align:center;z-index:11;background:rgba(18,14,9,.92);
  border:1px solid #57432a;border-radius:4px;padding:3px 12px;font-size:11.5px;color:#d8ceb8;pointer-events:none}
 
 /* ================= command GRID dock (AoE style) ================= */
 #bar{position:fixed;left:0;right:0;bottom:0;z-index:10;background:linear-gradient(#1a140d,#0d0a07);
  border-top:2px solid #4a3a22;padding:5px 8px}
-#dock{display:flex;flex-wrap:wrap;justify-content:center;gap:5px;align-items:flex-start;max-width:1560px;margin:0 auto}
-.group{background:rgba(28,21,13,.75);border:1px solid #43341f;border-radius:5px;padding:4px;
- flex:1 1 14%;min-width:212px;max-width:300px}
-.ghead{display:flex;justify-content:space-between;align-items:baseline;font-size:10px;letter-spacing:1.2px;
+/* one single row that scales down to fit -- never wraps into a second line */
+#dock{display:flex;flex-wrap:nowrap;justify-content:center;gap:4px;align-items:stretch;
+ width:100%;max-width:1560px;margin:0 auto;overflow-x:auto;scrollbar-width:thin}
+.group{background:rgba(28,21,13,.75);border:1px solid #43341f;border-radius:5px;padding:3px;
+ flex:1 1 0;min-width:0;max-width:none}
+.ghead{display:flex;justify-content:space-between;align-items:baseline;font-size:clamp(8px,.78vw,10px);letter-spacing:1.2px;
  text-transform:uppercase;padding:0 2px 4px;margin-bottom:4px;border-bottom:1px solid #43341f}
 .gsub{color:#7a6a4a;letter-spacing:0;text-transform:none;font-size:8.5px}
 .g-civic .ghead{color:#8fb0e8}.g-prod .ghead{color:#9cc87a}
 .g-ind .ghead{color:#e0a868}.g-res .ghead{color:#e884a4}.g-infra .ghead{color:#b0b0b0}
-.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}
+.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:3px}
 .card{background:#241b12;border:1px solid #43341f;border-top:2px solid #5a4630;border-radius:4px;
- padding:5px 4px 4px;cursor:pointer;text-align:center;line-height:1.15;overflow:hidden;
+ padding:3px 2px 3px;min-width:0;cursor:pointer;text-align:center;line-height:1.15;overflow:hidden;
  display:flex;flex-direction:column;align-items:center;justify-content:flex-start}
 .card:hover{background:#3f2f1e;transform:translateY(-1px)}
 .card.on{background:#c8a04a;border-color:#f0d9a0;color:#1a1408}
 .card.on .ccost{color:#4a3a10}
-.card .cic{font-size:19px;line-height:1.15;color:#e8dcc0}
+.card .cic{font-size:clamp(13px,1.35vw,19px);line-height:1.15;color:#e8dcc0}
 .card.on .cic{color:#2a2010}
-.cnm{font-size:9.5px;color:#d8ceb8;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.cnm{font-size:clamp(7.5px,.72vw,9.5px);color:#d8ceb8;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .card.on .cnm{color:#1a1408}
-.ccost{font-size:9.5px;color:#c8a04a;line-height:1.1}
+.ccost{font-size:clamp(7.5px,.72vw,9.5px);color:#c8a04a;line-height:1.1}
 .card.civic{border-top-color:#6a8ac8}.card.prod{border-top-color:#7aa85a}
 .card.ind{border-top-color:#c88a4a}.card.vice{border-top-color:#b04ac8}.card.law{border-top-color:#c85a5a}.card.res{border-top-color:#c85a7a}.card.infra{border-top-color:#8a8a8a}
 .card.poor{opacity:.5}
@@ -53255,6 +53257,7 @@ const depot = { food:0 }; // granary storage
 const cells = new Uint8Array(N*N);      // T_*
 const bldAt = new Int16Array(N*N).fill(-1);
 const roadLevel = new Uint8Array(N*N);
+const bridgeAt  = new Uint8Array(N*N);   // road tiles spanning the river
 
 let terrainGroup, roadGroup, bldGroup, cartGroup, decoGroup;
 let roadTiles=[];
@@ -53280,7 +53283,10 @@ function buildTerrain(){
   for(let i=0;i<p.count;i++){
     const wx=p.getX(i), wz=p.getZ(i);
     const gx=Math.floor(wx/TILE+N/2), gz=Math.floor(wz/TILE+N/2);
-    p.setY(i, (inb(gx,gz)? heightAt(gx,gz):0) - 0.15);
+    let h = inb(gx,gz)? heightAt(gx,gz) : 0;
+    // carve the riverbed down where there is water
+    if(inb(gx,gz) && cells[idx(gx,gz)]===T_WATER) h -= 0.62;
+    p.setY(i, h - 0.15);
   }
   g.computeVertexNormals();
   const cols=[];
@@ -53293,11 +53299,11 @@ function buildTerrain(){
       const cc=cells[idx(gx,gz)], f=soil[idx(gx,gz)];
       if(cc===T_WATER){
         const d=heightAt(gx,gz);
-        c=new THREE.Color().setHSL(0.55,0.42,0.20+d*0.03);
+        c=new THREE.Color().setHSL(0.55,0.45,0.13+d*0.03);
       } else if(cc===T_SAND){ c=new THREE.Color(0xc9b47a); }
       else {
         // fertile ground is richer / more yellow-green, barren is pale grey-brown
-        c=new THREE.Color().setHSL(0.22-0.06*(1-f), 0.16+0.34*f, 0.20+0.16*f);
+        c=new THREE.Color().setHSL(0.235-0.055*(1-f), 0.30+0.36*f, 0.185+0.15*f);
         const h=heightAt(gx,gz);
         c.offsetHSL(0,0,-h*0.09);
         // patchy noise so it doesn't look like a flat wash
@@ -53318,24 +53324,64 @@ function buildTerrain(){
   decoTerrain();
 }
 
-// animated water plane
+// ---------- river: real water tiles only ----------
 let waterMesh;
+function carveRiver(){
+  // a meandering river across the map, 2-3 tiles wide, generated BEFORE terrain build
+  // the river runs down the far west margin, clear of the founding site (x>=20),
+  // so the starting city is never split. the player bridges it to expand west.
+  let cx=6+Math.sin(Math.random()*6.28)*2, amp=7, ph=Math.random()*6.28;
+  for(let z=0;z<N;z++){
+    cx += Math.sin(z*0.085+ph)*0.42; cx += (9-cx)*0.012;
+    cx=Math.max(4,Math.min(11,cx));
+    const w=2+Math.sin(z*0.21+ph)*0.9;
+    for(let i=-3;i<=3;i++){
+      const x=Math.round(cx+i);
+      if(inb(x,z) && Math.abs(i)<=w) cells[idx(x,z)]=T_WATER;
+    }
+  }
+  // banks get a sand fringe so the shoreline reads properly
+  for(let z=0;z<N;z++) for(let x=0;x<N;x++){
+    if(cells[idx(x,z)]!==T_EMPTY) continue;
+    for(let j=-1;j<=1;j++) for(let i=-1;i<=1;i++){
+      if(inb(x+i,z+j)&&cells[idx(x+i,z+j)]===T_WATER){ cells[idx(x,z)]=T_SAND; j=9; break; }
+    }
+  }
+}
+
 function buildWater(){
-  const g=new THREE.PlaneGeometry(N*TILE*1.4, N*TILE*1.4, 90,90);
-  g.rotateX(-Math.PI/2);
-  const m=new THREE.MeshStandardMaterial({color:0x2b5f86, roughness:0.16, metalness:0.35,
-    transparent:true, opacity:0.86});
-  m.onBeforeCompile=sh=>{
-    sh.uniforms.uT={value:0};
-    waterMesh.userData.sh=sh;
-    sh.vertexShader='uniform float uT;\n'+sh.vertexShader.replace('#include <begin_vertex>',
-      '#include <begin_vertex>\n transformed.y += sin(position.x*0.22+uT*1.3)*0.06 + cos(position.z*0.19+uT)*0.05;');
-    sh.fragmentShader=sh.fragmentShader.replace('#include <color_fragment>',
-      '#include <color_fragment>\n diffuseColor.rgb *= 0.9+0.2*sin(vViewPosition.x*0.6+vViewPosition.z*0.4);');
-  };
-  waterMesh=new THREE.Mesh(g,m);
-  waterMesh.position.y=0.32;
+  waterMesh=new THREE.Group();
+  // one animated quad per water tile, sitting at the local terrain height
+  const qs=[];
+  for(let z=0;z<N;z++) for(let x=0;x<N;x++){
+    if(cells[idx(x,z)]!==T_WATER) continue;
+    const q=new THREE.PlaneGeometry(TILE,TILE,2,2); q.rotateX(-Math.PI/2);
+    const pos=q.attributes.position;
+    for(let i=0;i<pos.count;i++) pos.setY(i, heightAt(x,z)-0.30);
+    qs.push(q);
+  }
+  const m=new THREE.MeshStandardMaterial({color:0x2f6a92, roughness:0.18, metalness:0.30, flatShading:true});
+  waterMesh=new THREE.Mesh(mergeGeos(qs),m);
+  waterMesh.receiveShadow=true;
   scene.add(waterMesh);
+}
+
+// merge a list of geometries (same material) into one buffer
+function mergeGeos(list){
+  let vc=0;
+  for(const g of list) vc+=g.attributes.position.count;
+  const P=new Float32Array(vc*3), Nm=new Float32Array(vc*3);
+  let o=0;
+  for(const g of list){
+    const n=g.attributes.normal, p=g.attributes.position;
+    for(let i=0;i<p.count;i++){ P[o*3]=p.getX(i);P[o*3+1]=p.getY(i);P[o*3+2]=p.getZ(i);
+      Nm[o*3]=n.getX(i);Nm[o*3+1]=n.getY(i);Nm[o*3+2]=n.getZ(i); o++; }
+    g.dispose();
+  }
+  const out=new THREE.BufferGeometry();
+  out.setAttribute('position',new THREE.BufferAttribute(P,3));
+  out.setAttribute('normal',new THREE.BufferAttribute(Nm,3));
+  return out;
 }
 
 // soil overlay (toggle with F)
@@ -53416,13 +53462,16 @@ const RES_COLOR = { water:0x3fa9e0, food:0xd8b24a, clay:0xa8673c, wood:0x6e9c3a,
 // cost, size, jobs, category
 const BTYPES = {
   road:      {name:'Road',            cost:1,   w:1,h:1, cat:'infra', key:'road'},
+  bridge:    {name:'Bridge',          cost:14,  w:1,h:1, cat:'infra', key:'bridge',
+              desc:'The only way across the river. Pave it like a road.',
+              chain:'river crossing' },
   well:      {name:'Well',            cost:60,  w:1,h:1, jobs:0, cat:'civic',
               desc:'Fresh water. Every building within 6 tiles has drinking water.',
               chain:'water: radius 6'},
   cistern:   {name:'Cistern',         cost:220, w:2,h:2, jobs:2, cat:'civic',
               desc:'Holds storm water. Only works if it already has water coverage. Radius 12.',
               chain:'water: needs water cover, radius 12'},
-  aqueduct:  {name:'Aqueduct',        cost:340, w:1,h:1, jobs:1, cat:'civic',
+  aqueduct:  {name:'Aqueduct',        cost:340, w:4,h:1, jobs:1, cat:'civic',
               desc:'Carries water along a road. Must touch a well/cistern. Radius 18.',
               chain:'water: needs well/cistern, radius 18'},
   house:     {name:'House',           cost:100, w:1,h:1, jobs:0, cat:'res',   desc:'Grows from tent to domus as goods are delivered. Pays tax on upgrade.'},
@@ -53536,24 +53585,36 @@ function M(k){ return mats()[k]; }
 
 function buildingMesh(b){
   const t=BTYPES[b.type], g=new THREE.Group();
-  const w=t.w*TILE, h=t.h*TILE, X=w/2, Z=h/2;
+  // Authoring frame: walls are built around x=0 and (incorrectly, previously) z=Z=h/2,
+  // while the roof helper built around x=X=w/2 and z=Z. That left every roof half a
+  // plot off its walls. X and Z are both the plot centre, i.e. 0, so every helper
+  // (walls, roofs, windows, colonnades) shares one convention.
+  const w=t.w*TILE, h=t.h*TILE, X=0, Z=0;
   const add=(mesh,x,y,z)=>{ mesh.position.set(x,y,z); mesh.castShadow=true; mesh.receiveShadow=true; g.add(mesh); return mesh; };
+  // decoration is excluded when centring the model: a bush or a sign post should not
+  // decide where the walls sit, however big it is.
+  const deco=(mesh,x,y,z)=>{ mesh.userData.isDecor=true; return add(mesh,x,y,z); };
   const box=(mat,sx,sy,sz,x,y,z)=>add(new THREE.Mesh(new THREE.BoxGeometry(sx,sy,sz),mat),x,y,z);
   const cyl=(mat,rt,rb,sy,x,y,z,n=10)=>add(new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,sy,n),mat),x,y,z);
-  // pitched tile roof built from overlapping courses
+  // pitched gable roof: two real sloped slabs meeting at a ridge, with eaves overhang
   const tileRoof=(mat,sx,sz,baseY,rise)=>{
-    const steps=7, capW=sx*0.30;
-    for(let i=0;i<steps;i++){
-      const t0=i/steps, t1=(i+1)/steps;
-      const wAt = sx + (capW-sx)*t0;
-      const y = baseY + rise*t0;
-      const sl = Math.hypot((sx-capW)/steps, rise/steps);
-      const m=new THREE.Mesh(new THREE.BoxGeometry(sl*1.06,0.12,sz*1.10), mat);
-      add(m, X-(sx-capW)*0.5 + (sx-capW)/steps*(i+0.5), y+0.02, Z);
-      const m2=m.clone(); add(m2, -((X-(sx-capW)*0.5 + (sx-capW)/steps*(i+0.5))-X) , y+0.02, Z);
+    const capW=sx*0.22;                 // ridge width
+    const span=(sx-capW)/2;             // horizontal run of each slope
+    const ang=Math.atan2(rise,span);
+    const slope=Math.hypot(span,rise);
+    const roofParts=[];
+    for(const sgn of [-1,1]){
+      const m=new THREE.Mesh(new THREE.BoxGeometry(slope*1.04,0.16,sz*1.14), mat);
+      add(m, X+sgn*span/2, baseY+rise/2, Z);
+      m.rotation.z = -sgn*ang;
+      roofParts.push(m);
     }
+    roofParts.push(add(new THREE.Mesh(new THREE.BoxGeometry(capW*1.25,0.13,sz*1.16), mat), X, baseY+rise+0.05, Z));
+    for(const sgn of [-1,1])
+      roofParts.push(add(new THREE.Mesh(new THREE.BoxGeometry(0.10,0.10,sz*1.14), mat), X+sgn*(span+0.06), baseY, Z));
+    for(const m of roofParts) m.userData.isRoof=true;
   };
-  const flatRoof=(mat,sx,sz,y)=>box(mat,sx,0.18,sz,X,y,Z);
+  const flatRoof=(mat,sx,sz,y)=>{ const m=box(mat,sx,0.18,sz,X,y,Z); m.userData.isRoof=true; return m; };
   const plinth=()=>box(M('dark'),w*0.97,0.22,h*0.97,0,0.11,Z*0);
   const windows=(mat,sx,y,n=2)=>{
     for(let i=0;i<n;i++){ const x=X-sx/2 + sx*(i+0.5)/n;
@@ -53566,7 +53627,16 @@ function buildingMesh(b){
       box(mat,r*2.2,0.1,r*2.2,x,yTop,r2); }
   };
 
+  const inner=new THREE.Group(); g.add(inner);
+  const _add=g.add.bind(g); g.add=(m)=>{ inner.add(m); return g; };
   switch(b.type){
+    case 'bridge': {
+      // stone deck with an arch and parapets; only ever spans a single water tile
+      box(M('stone'),w,0.30,h,0,0.30,0);
+      for(const dz of [-1,1]) box(M('stone'),w,0.26,0.16,0,0.55,dz*0.42);
+      box(M('dark'),w*0.5,0.16,0.5,0,0.20,0);
+      for(const s2 of [-1,1]) box(M('cream'),0.14,0.30,0.14,s2*(w*0.5-0.12),0.60,0);
+      break; }
     case 'well': {
       cyl(M('stone'),0.75,0.82,0.6,0,0.3,0,12);
       cyl(M('water'),0.58,0.58,0.1,0,0.62,0,12);
@@ -53638,10 +53708,11 @@ function buildingMesh(b){
       const logG=new THREE.CylinderGeometry(0.16,0.16,0.9,7);
       for(let i=0;i<3;i++){ const l=new THREE.Mesh(logG,M('wood2'));
         l.rotation.x=Math.PI/2; add(l,-0.2+i*0.22,0.55,Z); }
-      box(M('wood'),0.14,1.3,0.14,0.75,0.65,-h/2+0.4);
+      box(M('wood'),0.14,1.3,0.14,0.75,0.65,-h/2+0.4).userData.isDecor=true;
       const axe=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.34,0.26),M('iron'));
-      add(axe,0.75,1.25,-h/2+0.4);
-      add(new THREE.Mesh(new THREE.IcosahedronGeometry(0.42,0),M('green')),-w/2+0.6,0.6,0);
+      axe.userData.isDecor=true; add(axe,0.75,1.25,-h/2+0.4);
+      const fol=new THREE.Mesh(new THREE.IcosahedronGeometry(0.42,0),M('green'));
+      fol.userData.isDecor=true; add(fol,-w/2+0.6,0.6,0);
       break; }
     case 'vineyard': {
       box(M('dark'),w*0.95,0.1,h*0.95,0,0.05,Z);
@@ -53656,13 +53727,19 @@ function buildingMesh(b){
       tileRoof(M('roof'),0.9,0.9,0.6,0.3);
       break; }
     case 'market': {
-      box(M('stone'),w*0.96,0.3,h*0.96,0,0.15,Z);
-      // peristyle: columns round an open courtyard
-      colonnade(M('marble'),0.16,2.1,4);
-      colonnade(M('marble'),0.16,2.1,4,h/2-0.45);
-      for(let i=0;i<4;i++) cyl(M('marble'),0.16,0.16,2.1,-w/2+0.45,1.05,-h/2+0.45+(h-0.9)*i/3,8);
-      for(let i=0;i<4;i++) cyl(M('marble'),0.16,0.16,2.1,w/2-0.45,1.05,-h/2+0.45+(h-0.9)*i/3,8);
-      flatRoof(M('roof2'),w*0.98,h*0.98,2.22);
+      box(M('stone'),w*0.96,0.3,h*0.96,0,0.15,Z).userData.isFooting=true;
+      // Peristyle. The row offset used to be Z-0.45 and h/2-0.45; once the model frame
+      // was re-centred on Z=0 those two landed at z=-0.45 and z=+1.55, so the whole
+      // colonnade sat off to one side. Both rows now use the same symmetric inset.
+      const mInset=0.45, mR=0.16, mYTop=2.1, mCx=w/2-mInset, mCz=h/2-mInset;
+      for(const sz of [-1,1]) for(let i=0;i<4;i++)
+        cyl(M('marble'),mR,mR,mYTop, -mCx+(2*mCx)*i/3, mYTop/2, sz*mCz, 8);
+      for(const sx of [-1,1]) for(let i=0;i<4;i++)
+        cyl(M('marble'),mR,mR,mYTop, sx*mCx, mYTop/2, -mCz+(2*mCz)*i/3, 8);
+      // entablature ring, then the flat roof over the whole peristyle
+      for(const sz of [-1,1]) box(M('cream'), w*0.94, 0.24, 0.34, 0, mYTop+0.12, sz*mCz);
+      for(const sx of [-1,1]) box(M('cream'), 0.34, 0.24, h*0.94, sx*mCx, mYTop+0.12, 0);
+      flatRoof(M('roof2'), w*1.02, h*1.02, mYTop+0.26);
       // stalls with awnings
       for(let i=0;i<3;i++){
         const x=(i-1)*w*0.28;
@@ -53685,39 +53762,62 @@ function buildingMesh(b){
       box(M('wood2'),0.42,0.6,0.06,0,0.34,h*0.44+0.04);
       tileRoof(M('roof'),w*0.96,h*0.96,1.36,0.5);
       if(b.type==='smith'){
-        cyl(M('dark'),0.24,0.34,0.9,-w/2-0.25,0.45,-h/2+0.5,8);
+        cyl(M('dark'),0.24,0.34,0.9,-w/2-0.25,0.45,-h/2+0.5,8).userData.isDecor=true;
         box(M('iron'),0.45,0.3,0.35,-w/2+0.6,1.9,h/2-0.4);
-        add(new THREE.Mesh(new THREE.BoxGeometry(0.7,0.12,0.3),M('iron')),w/2-0.5,0.75,h/2+0.3);
+        const anv=new THREE.Mesh(new THREE.BoxGeometry(0.7,0.12,0.3),M('iron')); anv.userData.isDecor=true; add(anv,w/2-0.5,0.75,h/2+0.3);
       }
       if(b.type==='weaver'){
-        box(M('terr'),0.9,0.55,0.06,0,1.0,h*0.44+0.05);
-        for(let i=0;i<3;i++) box(M('gold'),0.2,0.4,0.06,-0.3+i*0.3,1.0,h*0.44+0.09);
-        box(M('wood'),1.2,0.06,0.06,0,1.28,h*0.44);
+        // drying cloth on a pole out front, not a panel over the door
+        const pz=h*0.44+0.42;
+        box(M('wood'),0.08,1.5,0.08,-w*0.34,0.75,pz);
+        box(M('wood'),0.08,1.5,0.08, w*0.34,0.75,pz);
+        box(M('wood'),0.08,0.08,0.08,0,1.48,pz);
+        for(let i=0;i<3;i++)
+          box([M('gold'),M('terr'),M('cream')][i],0.24,0.78,0.05,-0.28+i*0.28,0.82,pz).userData.isDecor=true;
       }
       if(b.type==='carpenter'){
-        box(M('wood2'),1.1,0.24,0.3,0,0.65,h*0.32);
-        box(M('wood'),0.9,0.1,0.9,-w/2-0.2,0.35,-h/2+0.4);
+        box(M('wood2'),1.1,0.24,0.3,0,0.65,h*0.32).userData.isDecor=true;
+        box(M('wood'),0.9,0.1,0.9,-w/2-0.2,0.35,-h/2+0.4).userData.isDecor=true;
       }
       if(b.type==='potter'){
         const potG=new THREE.LatheGeometry([new THREE.Vector2(0.02,0),new THREE.Vector2(0.12,0.05),
           new THREE.Vector2(0.18,0.22),new THREE.Vector2(0.12,0.32),new THREE.Vector2(0.14,0.36)],8);
-        for(let i=0;i<4;i++) add(new THREE.Mesh(potG,M('terr')),-0.55+i*0.36,0.1,h*0.44+0.35);
-        cyl(M('dark'),0.4,0.34,0.5,w/2-0.4,0.25,h/2-0.5,8);
+        for(let i=0;i<4;i++){ const pm=new THREE.Mesh(potG,M('terr')); pm.userData.isDecor=true; add(pm,-0.55+i*0.36,0.1,h*0.44+0.35); }
+        cyl(M('dark'),0.4,0.34,0.5,w/2-0.4,0.25,h/2-0.5,8).userData.isDecor=true;
       }
       break; }
     case 'temple': {
-      box(M('stone'),w*0.94,0.7,h*0.94,0,0.35,Z);
-      const cx2=X, cz2=Z-h/2+0.7;
-      for(let i=0;i<6;i++) cyl(M('marble'),0.2,0.22,2.6,cx2-w*0.34+w*0.68*i/5,2.0,cz2,10);
-      box(M('marble'),w*0.9,0.3,h*0.5,0,3.45,cz2);
-      flatRoof(M('roof2'),w*0.95,h*0.6,3.62);
-      // pediment
-      for(let i=0;i<6;i++){
-        const x=cx2-w*0.3+w*0.6*i/5, y=3.8+ (i===0||i===5?0:0.25);
-        box(M('terr'),w*0.12,0.55,0.16,x,y+0.2,cz2-0.75);
+      // Symmetric peripteral temple: stepped podium, cella, 6 columns on every side,
+      // entablature over the whole plan, and one gable roof that actually covers the
+      // colonnade it sits on. Everything is measured from the plot centre (0, Z).
+      const base=0.64, CH=2.15, cx=w*0.36, cz=h*0.36, n=6;
+      box(M('stone'), w*0.99, 0.30, h*0.99, 0, 0.15, Z).userData.isFooting=true;
+      box(M('stone'), w*0.96, 0.34, h*0.96, 0, 0.47, Z);
+      // the sheltered room
+      box(M('cream'), w*0.44, 2.1, h*0.44, 0, 1.44, Z);
+      box(M('terr'), 0.62, 0.9, 0.14, 0, 1.6, h*0.22);
+      const col=(x,z)=>{
+        cyl(M('marble'),0.17,0.20,CH,x,base+CH/2,z,10);
+        box(M('marble'),0.40,0.09,0.40,x,base+0.045,z);
+        box(M('marble'),0.44,0.10,0.44,x,base+CH,z);
+      };
+      for(let i=0;i<n;i++){
+        const t=-cx + (2*cx)*i/(n-1);
+        col(t,-cz); col(t,cz);
+        if(i>0 && i<n-1){ col(-cx,t); col(cx,t); }
       }
-      for(let i=0;i<6;i++) cyl(M('marble'),0.2,0.22,2.2,cx2-w*0.34+w*0.68*i/5,1.8,h/2-0.3,10);
-      box(M('gold'),0.5,0.5,0.16,cx2,4.5,cz2);
+      const eY=base+CH;
+      box(M('marble'), w*0.90, 0.36, h*0.90, 0, eY+0.18, Z);
+      const rY=eY+0.36;
+      // eaves must clear the outer columns (span 3.26) or the roof floats inboard of them
+      tileRoof(M('roof2'), w*1.16, h*1.06, rY, 0.8);
+      // pediment closing each gable end, stepped to follow the roof pitch
+      for(const s of [-1,1]) for(let i=0;i<n;i++){
+        const t=-cx + (2*cx)*i/(n-1), f=1-Math.abs(t)/cx, hh=0.14+0.70*f;
+        box(M('terr'), (2*cx)/(n-1)*0.99, hh, 0.16, t, rY+hh/2, s*h*0.44);
+      }
+      box(M('gold'), 0.46, 0.46, 0.16, 0, rY+0.95, Z);
+      cyl(M('gold'), 0.14, 0.02, 0.42, 0, rY+1.34, Z, 8);
       break; }
     case 'park': {
       box(M('green'),w*0.96,0.1,h*0.96,0,0.05,Z);
@@ -53732,12 +53832,32 @@ function buildingMesh(b){
       box(M('marble'),0.34,0.26,0.34,0,1.05,Z-0.9);
       break; }
     case 'senate': {
-      box(M('cream'),w*0.9,2.0,h*0.9,0,1.0,Z);
-      windows(M('win'),w*0.9,1.4,5);
-      for(let i=0;i<6;i++) cyl(M('marble'),0.17,0.19,1.9,-w*0.4+w*0.8*i/5,0.95,h*0.45+0.15,8);
-      tileRoof(M('roof2'),w*0.95,h*0.95,2.0,0.6);
-      box(M('gold'),0.5,0.8,0.5,0,2.95,Z);
-      cyl(M('gold'),0.36,0.02,0.5,0,3.6,Z,8);
+      // Was a single portico row at z=+h*0.45 with a roof narrower than the walls it
+      // capped. Rebuilt as a symmetric peripteral hall, like the temple.
+      const base=0.64, CH=2.15, cx=w*0.40, cz=h*0.40, n=5;
+      box(M('stone'), w*0.99, 0.30, h*0.99, 0, 0.15, Z).userData.isFooting=true;
+      box(M('stone'), w*0.95, 0.34, h*0.95, 0, 0.47, Z);
+      box(M('cream'), w*0.60, 2.0, h*0.60, 0, 1.44, Z);
+      const col=(x,z)=>{
+        cyl(M('marble'),0.17,0.20,CH,x,base+CH/2,z,10);
+        box(M('marble'),0.40,0.09,0.40,x,base+0.045,z);
+        box(M('marble'),0.44,0.10,0.44,x,base+CH,z);
+      };
+      for(let i=0;i<n;i++){
+        const t=-cx + (2*cx)*i/(n-1);
+        col(t,-cz); col(t,cz);
+        if(i>0 && i<n-1){ col(-cx,t); col(cx,t); }
+      }
+      const eY=base+CH;
+      box(M('marble'), w*0.92, 0.34, h*0.92, 0, eY+0.17, Z);
+      const rY=eY+0.34;
+      tileRoof(M('roof2'), w*1.10, h*1.04, rY, 0.72);   // eaves clear the outer columns
+      for(const s of [-1,1]) for(let i=0;i<n;i++){
+        const t=-cx + (2*cx)*i/(n-1), f=1-Math.abs(t)/cx, hh=0.14+0.62*f;
+        box(M('terr'), (2*cx)/(n-1)*0.99, hh, 0.16, t, rY+hh/2, s*h*0.46);
+      }
+      box(M('gold'),0.5,0.8,0.5,0,rY+0.86,Z).userData.isDecor=true;   // acroterion, not a column
+      cyl(M('gold'),0.36,0.02,0.5,0,rY+1.48,Z,8).userData.isDecor=true;
       break; }
     case 'alehouse': case 'gambling': case 'brothel': case 'opiumden': {
       box(M('dark'),w*0.94,0.22,h*0.94,0,0.11,Z);
@@ -53745,11 +53865,11 @@ function buildingMesh(b){
       box(M('dark'),w*0.88,0.12,h*0.88,0,1.42,Z);
       for(let i=0;i<3;i++) box(M('gold'),0.24,0.5,0.08,-w*0.28+i*w*0.28,0.95,h*0.43+0.05);
       // awning over the door
-      box(M('terr'),w*0.7,0.1,0.5,0,1.35,h/2+0.2);
+      box(M('terr'),w*0.7,0.1,0.5,0,1.35,h/2+0.2).userData.isDecor=true;
       if(b.type==='gambling') for(let i=0;i<3;i++) box(M('gold'),0.1,0.1,0.1,-0.4+i*0.4,1.95,Z-0.5);
-      if(b.type==='opiumden'){ cyl(M('dark'),0.2,0.24,0.5,w/2+0.2,0.35,-h/2+0.4,8);
-        for(let i=0;i<3;i++) box(M('gold'),0.08,0.3,0.08,w/2+0.2,0.6,-h/2+0.4,6); }
-      if(b.type==='brothel') box(M('terr'),0.5,0.36,0.06,w/2-0.3,1.9,Z);
+      if(b.type==='opiumden'){ cyl(M('dark'),0.2,0.24,0.5,w/2+0.2,0.35,-h/2+0.4,8).userData.isDecor=true;
+        for(let i=0;i<3;i++) box(M('gold'),0.08,0.3,0.08,w/2+0.2,0.6,-h/2+0.4,6).userData.isDecor=true; }
+      if(b.type==='brothel') box(M('terr'),0.5,0.36,0.06,w/2-0.3,1.9,Z).userData.isDecor=true;
       break; }
     case 'watchtower': {
       box(M('stone'),1.5,0.3,1.5,0,0.15,Z);
@@ -53758,8 +53878,8 @@ function buildingMesh(b){
       box(M('dark'),1.5,0.25,1.5,0,3.35,Z);
       for(const [dx,dz] of [[-0.6,-0.6],[0.6,-0.6],[-0.6,0.6],[0.6,0.6]])
         box(M('stone'),0.24,0.6,0.24,dx,3.75,Z+dz);
-      box(M('roof2'),1.7,0.16,1.7,0,4.15,Z);
-      cyl(M('gold'),0.06,0.06,0.7,0,4.55,Z,5);
+      tileRoof(M('roof2'),1.72,1.72,3.48,0.55);
+      cyl(M('gold'),0.07,0.07,0.6,0,4.42,Z,5);
       break; }
     case 'import': {
       box(M('stone'),w*0.9,0.3,h*0.9,0,0.15,Z);
@@ -53774,8 +53894,62 @@ function buildingMesh(b){
       break; }
   }
   if(b.type!=='house'&&b.type!=='watchtower'&&b.type!=='farm'&&b.type!=='farmOlive'&&b.type!=='vineyard'&&b.type!=='park'&&b.type!=='claypit'&&b.type!=='ironMine'&&b.type!=='woodcutter')
-    box(M('stone'),w*0.98,0.22,h*0.98,0,0.11,Z);
+    box(M('stone'),w*0.98,0.62,h*0.98,0,0.02,Z).userData.isFooting=true;   // sunk foundation: hides terrain slope gaps
+  g.add=_add;
+  normaliseModel(inner, w, h);
   return g;
+}
+
+// Every model above is authored in whatever local frame was convenient (some from
+// 0, some from w/2, some using h*0.44). Rather than trusting 26 different hand-tuned
+// conventions, measure the finished mesh and canonicalise it:
+//   origin = centre of the footprint, base = ground level.
+// Then placeGroup() can position every building identically and be correct by construction.
+// Find the model's core mass: the pieces that define the building, weighted by footprint
+// area. Small asymmetric decoration (a chimney, a hanging sign, a sawhorse, a bare tree)
+// is excluded, because otherwise it drags the walls and roof off the foundation.
+function modelCore(inner){
+  inner.updateMatrixWorld(true);
+  const items=[];
+  inner.traverse(o=>{
+    if(!o.isMesh || o.userData.isDecor) return;
+    o.geometry.computeBoundingBox();
+    const bb=o.geometry.boundingBox.clone(); bb.applyMatrix4(o.matrixWorld);
+    if(!isFinite(bb.min.x)) return;
+    items.push({bb, a:Math.max(1e-6,(bb.max.x-bb.min.x)*(bb.max.z-bb.min.z))});
+  });
+  if(!items.length) return null;
+  const maxA=items.reduce((m,i)=>i.a>m?i.a:m,0);
+  const core=items.filter(i=>i.a>=maxA*0.12);
+  let sw=0,sx=0,sz=0,minx=1e9,maxx=-1e9,minz=1e9,maxz=-1e9;
+  for(const i of core){
+    sw+=i.a; sx+=i.a*(i.bb.min.x+i.bb.max.x)/2; sz+=i.a*(i.bb.min.z+i.bb.max.z)/2;
+    minx=Math.min(minx,i.bb.min.x); maxx=Math.max(maxx,i.bb.max.x);
+    minz=Math.min(minz,i.bb.min.z); maxz=Math.max(maxz,i.bb.max.z);
+  }
+  // decoration is already excluded above, so the ground line is simply the lowest core piece
+  let base=1e9; for(const i of core) base=Math.min(base,i.bb.min.y);
+  return { x:sx/sw, z:sz/sw, base, spanX:maxx-minx, spanZ:maxz-minz };
+}
+
+// Canonicalise: core centred on the origin, base on the ground, never spilling into the
+// neighbouring plot. Repeated because scaling perturbs a clamped centre.
+function normaliseModel(inner, fw, fh){
+  for(let pass=0; pass<2; pass++){
+    const c=modelCore(inner);
+    if(!c) return;
+    const CLAMP=TILE*1.6;
+    inner.position.x += Math.max(-CLAMP,Math.min(CLAMP,-c.x));
+    inner.position.z += Math.max(-CLAMP,Math.min(CLAMP,-c.z));
+    inner.position.y -= c.base;
+    if(!fw || pass===1) break;
+    const c2=modelCore(inner);
+    if(!c2) break;
+    const sx=Math.min(1,(fw*1.06)/Math.max(1e-6,c2.spanX));
+    const sz=Math.min(1,(fh*1.06)/Math.max(1e-6,c2.spanZ));
+    if(sx>=0.999&&sz>=0.999) break;
+    inner.scale.set(sx,1,sz);
+  }
 }
 
 function houseMesh(tier){
@@ -53785,15 +53959,13 @@ function houseMesh(tier){
   const cyl=(mat,rt,rb,sy,x,y,z,n=10)=>{const o=new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,sy,n),mat);
     o.position.set(x,y,z);o.castShadow=true;g.add(o);return o;};
   const roof=(mat,sx,sz,baseY,rise)=>{
-    const steps=6, capW=sx*0.28;
-    for(let i=0;i<steps;i++){
-      const wAt=(sx-capW)*((steps-i)/steps);
-      const y=baseY+rise*(i/steps);
-      const sl=Math.hypot((sx-capW)/steps, rise/steps);
-      const cx=(sx-capW)/2*(i/steps);
-      box(mat,sl*1.08,0.1,sz*1.08, cx, y+0.03, 0);
-      box(mat,sl*1.08,0.1,sz*1.08, -cx, y+0.03, 0);
+    const capW=sx*0.22, span=(sx-capW)/2;
+    const ang=Math.atan2(rise,span), slope=Math.hypot(span,rise);
+    for(const sgn of [-1,1]){
+      const m=box(mat,slope*1.04,0.14,sz*1.14, sgn*span/2, baseY+rise/2, 0);
+      m.rotation.z=-sgn*ang; m.userData.isRoof=true;
     }
+    box(mat,capW*1.3,0.12,sz*1.16, 0, baseY+rise+0.04, 0).userData.isRoof=true;
   };
   const win=(x,y,z=0.86)=>box(M('win'),0.3,0.38,0.08,x,y,z);
 
@@ -53856,6 +54028,7 @@ function houseMesh(tier){
       add2(g, M('marble'), s*0.62, 3.5, 0.85);
     }
   }
+  normaliseModel(g, TILE, TILE);
   return g;
 }
 function add2(g,mat,x,y,z){
@@ -53868,6 +54041,7 @@ function canPlace(type,x,z){
   if(type==='road'){
     if(!inb(x,z)) return 'out';
     if(cells[idx(x,z)]===T_BLD) return 'building';
+    if(cells[idx(x,z)]===T_WATER) return 'water';
     return null;
   }
   if(!inb(x,z)) return 'out';
@@ -53878,6 +54052,25 @@ function canPlace(type,x,z){
     if(c===T_BLD) return 'building';
     if(c===T_ROCK) return 'rock';
   }
+  return null;
+}
+
+// Why a tile cannot take this building right now, for the hover ghost.
+// (updateGhost has called this since it was written but the function never existed --
+// every mousemove threw a ReferenceError, so the ghost and the red 'cannot build here'
+// message were silently dead.)
+const SITE_WHY={out:'off the map', water:'needs a bridge', building:'already built on',
+                rock:'clear the rock first'};
+function siteProblem(type,x,z){
+  if(!BTYPES[type]) return null;
+  if(type==='bridge'){
+    if(!inb(x,z)) return 'out';
+    if(cells[idx(x,z)]!==T_WATER) return 'a bridge must span the river';
+    return null;
+  }
+  const err=canPlace(type,x,z);
+  if(err) return SITE_WHY[err]||err;
+  if(G.money<BTYPES[type].cost) return 'not enough denarii';
   return null;
 }
 
@@ -54086,7 +54279,50 @@ function clearArea(x0,z0,x1,z1,keepWater){
   }
 }
 
+// BFS from every building over free land to the nearest road tile, then pave that path.
+// Runs after the starter is laid out and is also safe to re-run (it is idempotent).
+function connectAllBuildings(){
+  const isRoad=(x,z)=>inb(x,z)&&cells[idx(x,z)]===T_ROAD;
+  const K=(x,z)=>(x+','+z);
+  for(const b of blds){
+    const t=BTYPES[b.type];
+    const inside=(x,z)=>x>=b.x&&x<b.x+t.w&&z>=b.z&&z<b.z+t.h;
+    let ok=false;
+    for(let j=-1;j<=t.h&&!ok;j++) for(let i=-1;i<=t.w&&!ok;i++) if(isRoad(b.x+i,b.z+j)) ok=true;
+    if(ok) continue;
+    // BFS from the footprint outwards; record parents so we can walk a real path back
+    const parent=new Map(); const q=[];
+    for(let j=-1;j<=t.h;j++) for(let i=-1;i<=t.w;i++){ const x=b.x+i,z=b.z+j;
+      if(!inb(x,z)) continue; parent.set(K(x,z),null); q.push([x,z]); }
+    let goal=null;
+    for(let qi=0; qi<q.length && !goal; qi++){
+      const [x,z]=q[qi];
+      if(isRoad(x,z)&&!inside(x,z)){ goal=[x,z]; break; }
+      for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]){
+        const nx=x+dx, nz=z+dz, k=K(nx,nz);
+        if(parent.has(k)||!inb(nx,nz)) continue;
+        const c=cells[idx(nx,nz)];
+        if(c===T_WATER||c===T_BLD||c===T_ROCK||c===T_TREE) continue;   // route around obstacles
+        parent.set(k,K(x,z)); q.push([nx,nz]);
+      }
+    }
+    if(!goal) continue;
+    let cur=goal;
+    while(cur){ const [x,z]=cur;
+      if(!inside(x,z) && !isRoad(x,z) && cells[idx(x,z)]===T_EMPTY){ cells[idx(x,z)]=T_ROAD; roadLevel[idx(x,z)]=1; }
+      const p=parent.get(K(x,z)); cur = p? p.split(',').map(Number) : null; }
+  }
+}
+
 function place(type,x,z,free){
+  if(type==='bridge'){
+    if(!inb(x,z)) return false;
+    if(cells[idx(x,z)]!==T_WATER) { msg('A bridge must span the river','bad'); return false; }
+    if(!free && G.money<BTYPES.bridge.cost){ msg('Not enough denarii','bad'); return false; }
+    if(!free) G.money-=BTYPES.bridge.cost;
+    cells[idx(x,z)]=T_ROAD; roadLevel[idx(x,z)]=3; bridgeAt[idx(x,z)]=1;
+    rebuildRoads(); msg('Bridge built','ok'); return true;
+  }
   if(type==='road'){
     const err=canPlace('road',x,z);
     if(err) return false;
@@ -54144,7 +54380,7 @@ function rebuildRoads(){
     let lv=1; const n=idx(x,z);
     let conn=0; for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]){ const xx=x+dx,zz=z+dz;
       if(inb(xx,zz)&&cells[idx(xx,zz)]===T_ROAD) conn++; }
-    roadLevel[n]= conn>=3?2:1;
+    roadLevel[n]= bridgeAt[n] ? 3 : (conn>=3?2:1);
   }
   roadTiles=[];
   for(let z=0;z<N;z++) for(let x=0;x<N;x++) if(cells[idx(x,z)]===T_ROAD) roadTiles.push([x,z]);
@@ -54152,8 +54388,14 @@ function rebuildRoads(){
   for(let z=0;z<N;z++) for(let x=0;x<N;x++){
     if(cells[idx(x,z)]!==T_ROAD) continue;
     const lv=roadLevel[idx(x,z)];
-    const m=new THREE.Mesh(new THREE.BoxGeometry(TILE*0.96,0.16,TILE*0.96), mats[lv]);
-    const [wx,wz]=worldOf(x,z); m.position.set(wx,heightAt(x,z)+0.05,wz);
+    const [wx,wz]=worldOf(x,z);
+    if(lv===3){ // bridge deck spanning the river
+      const m=new THREE.Mesh(new THREE.BoxGeometry(TILE*1.04,0.30,TILE*1.04), mkMat(0x9a8f7a));
+      m.position.set(wx, 0.10, wz);
+      m.receiveShadow=true; m.castShadow=true; roadGroup.add(m); continue;
+    }
+    const m=new THREE.Mesh(new THREE.BoxGeometry(TILE*1.04,0.18,TILE*1.04), mats[lv]);
+    m.position.set(wx,heightAt(x,z)+0.05,wz);
     m.receiveShadow=true; m.castShadow=false; roadGroup.add(m);
   }
 }
@@ -54272,10 +54514,12 @@ function simTick(dt){
   for(const b of blds){
     if(!VICE.includes(b.type)||b.type==='lararium') continue;
     const s2=b.sinLocal||0;
-    const gate = b.type==='opiumden' ? 0.62 : b.type==='alehouse'?0.55:0.75;
+    const gate = b.type==='opiumden' ? 0.88 : b.type==='alehouse'?0.55:0.75;
     if(s2>gate){
       b.evoT=(b.evoT||0)+dt;
-      if(b.evoT>45){
+      // the Lararium is a LATE payoff: a district has to wallow in near-maximal
+      // sin for a full 4 minutes of sim time before it builds its own shrine.
+      if(b.evoT>240 && b.type==='opiumden'){
         b.evoT=0;
         // a district that has wallowed long enough builds its own shrine: the sin
         // finally tips over into a Lararium, which projects it back down hard
@@ -54433,13 +54677,16 @@ function settleMonth(){
 }
 // ---------- SCENE / CAMERA ----------
 let renderer, scene, camera;
-const cam = {dist:46, yaw:0.9, pitch:0.85, tx:0, tz:6};
+// fixed isometric camera: no orbit, no roll, classic 45/45 city-builder view
+const ISO_YAW = Math.PI*0.25;
+const ISO_PITCH = Math.atan(1/Math.SQRT2);   // true isometric 35.264 deg
+const cam = {dist:46, yaw:ISO_YAW, pitch:ISO_PITCH, tx:0, tz:0};
 function init3D(){
   scene=new THREE.Scene();
   scene.background=new THREE.Color(0x9fc4dd);
   scene.fog=new THREE.Fog(0x9fc4dd, 90, 260);
-  camera=new THREE.PerspectiveCamera(50, innerWidth/innerHeight, 0.5, 900);
-  renderer=new THREE.WebGLRenderer({antialias:true});
+  camera=new THREE.PerspectiveCamera(30, innerWidth/innerHeight, 1, 900);  // narrow fov = near-orthographic
+  renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});
   renderer.setSize(innerWidth,innerHeight);
   renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
   renderer.setPixelRatio(Math.min(devicePixelRatio,2));
@@ -54456,11 +54703,44 @@ function init3D(){
   window.addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); });
 }
 function updateCam(dt){
-  const cy=cam.dist*Math.cos(cam.pitch)*Math.sin(cam.yaw);
-  const cx=cam.tx+cam.dist*Math.cos(cam.pitch)*Math.cos(cam.yaw);
-  const cz=cam.tz+cam.dist*Math.sin(cam.pitch);
-  camera.position.lerp(new THREE.Vector3(cx,Math.max(6,cy),cz), 1-Math.pow(0.001,dt));
+  // classic iso: camera sits back along the fixed diagonal, screen-space pans stay aligned
+  const d=cam.dist;
+  const cx=cam.tx + d*Math.cos(cam.pitch)*Math.cos(cam.yaw);
+  const cy=d*Math.sin(cam.pitch);
+  const cz=cam.tz + d*Math.cos(cam.pitch)*Math.sin(cam.yaw);
+  camera.position.set(cx,cy,cz);
+  camera.up.set(0,1,0);
   camera.lookAt(cam.tx,0,cam.tz);
+  cam.cy=cy;
+}
+
+// screen-space pan: map a 2D drag delta onto the ground plane along the camera's own
+// screen axes. The basis is derived from the camera, not guessed:
+//   zAxis = eye-target direction, xAxis = cross(up, zAxis) = the camera's screen-right.
+// For an isometric camera those are the only two vectors that make drag follow the mouse.
+function camBasis(){
+  const zx=Math.cos(cam.yaw), zz=Math.sin(cam.yaw);   // camera sits at target + d*(zx,.,zz)
+  return { rx:zz, rz:-zx,          // screen-right projected on the ground
+           ux:-zx, uz:-zz };       // screen-up    projected on the ground
+}
+// dx,dy in screen pixels with y pointing DOWN (i.e. raw mouse deltas). Dragging moves the
+// world with the pointer, so the target moves against it.
+function panScreen(dx,dy){
+  const {rx,rz,ux,uz}=camBasis();
+  const k=cam.dist*0.0013;
+  cam.tx -= (rx*dx + ux*dy)*k;
+  cam.tz -= (rz*dx + uz*dy)*k;
+}
+// One key tap, in world units. Deliberately the SAME convention as panScreen -- dx/dy are
+// screen-space, y pointing DOWN, and both move the world in that direction. Having two
+// functions with opposite sign conventions is exactly how the axes ended up crossed.
+// So "W" is panKey(0,+1): the view pans up, which slides the world down the screen,
+// identical to dragging downward.
+function panKey(dx,dy){
+  const {rx,rz,ux,uz}=camBasis();
+  const s=Math.max(1.8, cam.dist*0.030);   // scale with zoom so it stays usable far out
+  cam.tx -= (rx*dx + ux*dy)*s;
+  cam.tz -= (rz*dx + uz*dy)*s;
 }
 
 // ---------- raycast ----------
@@ -54486,11 +54766,24 @@ function pickBuilding(ev){
 }
 
 // ---------- selection + ghost ----------
-let tool='road', sel=null, demolishMode=false, showPaths=true, pathGroup=null, chainOpen=false;
-function setTool(t){ tool=t; demolishMode=false; refreshBar(); }
-function setDemolish(){ demolishMode=!demolishMode; refreshBar(); }
+// tool === null is the neutral state: no build mode, left-click just selects/inspects.
+let tool=null, sel=null, demolishMode=false, showPaths=true, pathGroup=null, chainOpen=false;
+function setTool(t){
+  // clicking the card you already have selected puts you back on neutral
+  tool = (t===tool && t!=='inspect') ? null : t;
+  if(tool==='inspect') tool='inspect';
+  demolishMode=false; refreshBar(); updateGhost();
+}
+// Esc / right-click: back to neutral, nothing armed.
+function setNeutral(){ tool=null; demolishMode=false; refreshBar(); updateGhost(); }
+function setDemolish(){ demolishMode=!demolishMode; if(demolishMode) tool=null; refreshBar(); updateGhost(); }
 function updateGhost(){
-  if(ghostMesh){ bldGroup.remove(ghostMesh); ghostMesh.geometry.dispose(); ghostMesh=null; }
+  // ghostMesh is a Group, not a Mesh -- it has no .geometry of its own, so dispose the
+  // whole subtree (and only free the shared materials, which the ghost cloned in place).
+  if(ghostMesh){ bldGroup.remove(ghostMesh); ghostMesh.traverse(o=>{ if(o.isMesh && o.geometry) o.geometry.dispose(); }); ghostMesh=null; }
+  const gi=document.getElementById('ghostinfo');
+  if(gi && !gi.textContent) gi.style.display='none';
+  if(!tool || !BTYPES[tool]) return;
   if(!onTile) return;
   if(tool==='inspect') return;
   const err=siteProblem(tool,mouseTile.x,mouseTile.z);
@@ -54500,14 +54793,14 @@ function updateGhost(){
   const mat=new THREE.MeshStandardMaterial({color: err?0xff4444:0x66ff99, transparent:true, opacity:0.35, depthWrite:false});
   const base=new THREE.Mesh(new THREE.BoxGeometry(w,0.12,h),mat); g.add(base);
   if(tool!=='road'){
-    const body=tool==='house'? houseMesh(1) : buildingMesh({type:tool,x:mouseTile.x,z:mouseTile.z});
+    const body=tool==='house'? houseMesh(1) : buildingMesh({type:(tool==='bridge'?'bridge':tool),x:mouseTile.x,z:mouseTile.z});
     body.traverse(o=>{ if(o.isMesh){ o.material=mat; o.castShadow=false; o.receiveShadow=false; } });
     g.add(body);
   }
   const [wx,wz]=worldOf(mouseTile.x,mouseTile.z);
   g.position.set(wx+(t.w-1)*TILE/2, mouseTile.y+0.1, wz+(t.h-1)*TILE/2);
   g.renderOrder=5; bldGroup.add(g); ghostMesh=g;
-  const gi=document.getElementById('ghostinfo'); if(gi) gi.textContent = err? ('\u2716 '+err) : (BTYPES[tool].chain||'');
+  if(gi){ gi.textContent = err? ('\u2716 '+err) : (BTYPES[tool].chain||''); gi.style.display='block'; }
 }
 function refreshSel(){
   const p=document.getElementById('selbox');
@@ -54603,6 +54896,7 @@ function refreshBar(){
     let cards='';
     if(g.k==='infra'){
       cards+=`<div class="card infra ${tool==='road'&&!demolishMode?'on':''}" onclick="setTool('road')" title="Roads. Servants can only walk on roads."><span class="cic">\u2591</span><span class="cnm">Road</span><span class="ccost">1</span></div>
+<div class="card infra ${tool==='bridge'&&!demolishMode?'on':''}" onclick="setTool('bridge')" title="Bridge \u2014 the only way across the river. 14 denarii, must span a water tile."><span class="cic">\u2838</span><span class="cnm">Bridge</span><span class="ccost">14</span></div>
       <div class="card infra ${tool==='inspect'&&!demolishMode?'on':''}" onclick="setTool('inspect')" title="Click a building to inspect it"><span class="cic">\u2315</span><span class="cnm">Inspect</span><span class="ccost">&mdash;</span></div>
       <div class="card infra ${demolishMode?'on danger':''}" onclick="setDemolish()" title="Demolish, 30% refund"><span class="cic">\u2715</span><span class="cnm">Demolish</span><span class="ccost">+30%</span></div>`;
     } else cards += g.types.map(k=>tileHTML(k)).join('');
@@ -54671,9 +54965,9 @@ function setSpeed(s){ G.speed=s; renderHUD(); }
 let dragStart=null, dragPaint=false, panning=false, lastX=0,lastY=0, panBtn=false;
 addEventListener('mousemove',e=>{
   lastX=e.clientX; lastY=e.clientY;
-  if(panBtn){ cam.tx-=Math.cos(cam.yaw)*(e.movementX)*cam.dist*0.0016; cam.tz+=Math.sin(cam.yaw)*(e.movementX)*cam.dist*0.0016;
-              cam.tx-=Math.sin(cam.yaw)*(e.movementY)*cam.dist*0.0016; cam.tz-=Math.cos(cam.yaw)*(e.movementY)*cam.dist*0.0016; return; }
-  if(orbiting){ cam.yaw-=e.movementX*0.005; cam.pitch=Math.max(0.18,Math.min(1.5,cam.pitch+e.movementY*0.004)); return; }
+  // right/middle drag = pan (screen-space). no orbit: the iso angle is fixed.
+  if(rmbDown && (Math.abs(e.clientX-rmbDown.x)>4 || Math.abs(e.clientY-rmbDown.y)>4)) rmbMoved=true;
+  if(panBtn||orbiting){ panScreen(e.movementX,e.movementY); return; }
   const t=pickTile(e);
   if(t){ mouseTile=t; onTile=true;
     if(dragPaint&&tool==='road'&&!demolishMode){ place('road',t.x,t.z); }
@@ -54681,39 +54975,45 @@ addEventListener('mousemove',e=>{
   updateGhost();
 });
 let orbiting=false;
+let rmbDown=null, rmbMoved=false;
 addEventListener('mousedown',e=>{
-  if(e.button===1||(e.button===0&&e.shiftKey)){ orbiting=true; panBtn=false; return; }
-  if(e.button===2){ panBtn=true; orbiting=false; return; }
+  if(e.button===1||(e.button===0&&e.shiftKey)){ orbiting=true; panBtn=false; e.preventDefault(); return; }
+  if(e.button===2){ panBtn=true; orbiting=false; rmbDown={x:e.clientX,y:e.clientY}; rmbMoved=false; return; }
   if(e.button===0){
     const t=pickTile(e);
     const b=pickBuilding(e);
-    if(demolishMode){ if(b) demolish(b); else if(t&&cells[idx(t.x,t.z)]===T_ROAD){ cells[idx(t.x,t.z)]=T_EMPTY; roadLevel[idx(t.x,t.z)]=0; rebuildRoads(); } return; }
-    if(tool==='inspect'){ sel=b; refreshSel(); return; }
+    if(demolishMode){ if(b) demolish(b); else if(t&&cells[idx(t.x,t.z)]===T_ROAD){ cells[idx(t.x,t.z)]=T_EMPTY; roadLevel[idx(t.x,t.z)]=0; bridgeAt[idx(t.x,t.z)]=0; rebuildRoads(); } return; }
+    if(tool==='inspect'||!tool){ sel=b; refreshSel(); return; }   // neutral left-click = inspect
     if(tool==='road'){ dragStart=t; dragPaint=true; if(t) place('road',t.x,t.z); return; }
     if(t){ const r=place(tool,t.x,t.z); if(r) sel=r; refreshSel(); }
   }
 });
 addEventListener('mouseup',e=>{
-  if(e.button===2) panBtn=false;
+  if(e.button===2){
+    // a right-click that never turned into a drag means "put me back on neutral"
+    if(rmbDown && !rmbMoved) setNeutral();
+    rmbDown=null; panBtn=false;
+  }
   if(e.button===1) orbiting=false;
   dragPaint=false; dragStart=null;
 });
 addEventListener('contextmenu',e=>e.preventDefault());
-addEventListener('wheel',e=>{ cam.dist=Math.max(10,Math.min(140,cam.dist*(1+Math.sign(e.deltaY)*0.12))); },{passive:true});
+addEventListener('wheel',e=>{ cam.dist=Math.max(14,Math.min(180,cam.dist*(1+Math.sign(e.deltaY)*0.11))); },{passive:true});
 addEventListener('keydown',e=>{
   const k=e.key.toLowerCase();
   if(k==='q'){ setTool('road'); }
   if(k==='e'){ setTool('inspect'); }
-  if(k==='x'){ demolishMode=!demolishMode; refreshBar(); }
+  if(k==='n'){ setNeutral(); }
+  if(k==='x'){ setDemolish(); }
   if(k===' '){ e.preventDefault(); setSpeed(G.speed===0?1:0); }
-  if(k==='escape'){ sel=null; refreshSel(); }
-  if('wasd'.includes(k)&&k.length===1){
+  if(k==='escape'){ setNeutral(); sel=null; refreshSel(); }
+  // WASD and the arrow keys both pan in screen space, on the same axes as the mouse drag
+  // y is DOWN here, matching panScreen/panKey. W = view pans up = world slides down.
+  const PAN={w:[0,1],s:[0,-1],a:[-1,0],d:[1,0],arrowup:[0,1],arrowdown:[0,-1],arrowleft:[-1,0],arrowright:[1,0]}[k];
+  if(PAN){
     e.preventDefault();
-    const sp=4*cam.dist*0.016, fx=Math.cos(cam.yaw), fz=-Math.sin(cam.yaw);
-    if(k==='w'){cam.tx+=fx*sp;cam.tz+=fz*sp;}
-    if(k==='s'){cam.tx-=fx*sp;cam.tz-=fz*sp;}
-    if(k==='a'){cam.tx-=fz*sp;cam.tz+=fx*sp;}
-    if(k==='d'){cam.tx+=fz*sp;cam.tz-=fx*sp;}
+    const step=e.shiftKey?2.6:1;
+    panKey(PAN[0]*step, PAN[1]*step);
   }
   if(k==='g'){ showPaths=!showPaths; msg('Servant paths '+(showPaths?'shown':'hidden')); }
   if(k==='c'){ chainOpen=!chainOpen; renderChains(); }
@@ -54745,8 +55045,7 @@ function loop(now){
 // ---------- BOOT ----------
 function init(){
   // a little river
-  for(let z=0;z<N;z++){ const wx=6+Math.round(Math.sin(z*0.22)*3);
-    for(let i=-1;i<=1;i++){ if(inb(wx+i,z) && cells[idx(wx+i,z)]===T_EMPTY) cells[idx(wx+i,z)]=T_WATER; } }
+  carveRiver();
   for(let i=0;i<300;i++){ const x=Math.floor(Math.random()*N),z=Math.floor(Math.random()*N);
     if(inb(x,z)&&cells[idx(x,z)]===T_EMPTY&&Math.random()<0.1) cells[idx(x,z)]=T_TREE; }
   for(let z=0;z<N;z++){ const x=Math.floor(Math.random()*N); if(inb(x,z)&&cells[idx(x,z)]===T_EMPTY) cells[idx(x,z)]=T_SAND; }
@@ -54797,6 +55096,9 @@ function init(){
   place('smith',C+4,C+18,true);
   place('carpenter',C+10,C+18,true);
   place('weaver',C+0,C+18,true);
+  // --- guarantee road access: pave an entrance spur from every building to the nearest
+  // road, instead of trusting the hand-written layout above to happen to touch one ---
+  connectAllBuildings();
   rebuildRoads();
   fieldTick(0.25);
   msg('A new colony on the Tiber. Roads first, then a market.','');
@@ -54997,7 +55299,11 @@ function avgMood(){
 let fieldOverlay=null, fieldMode=-1;
 const FIELD_MODES=['desirability','mood','sin','crime'];
 function cycleFieldOverlay(){
+  // (fieldMode+1) % (n+1) yields 0..n, so the "off" state was arithmetically
+  // unreachable: mode n existed, mode -1 did not, and mode n fell through to the
+  // crime branch. Map the top of the range back onto off explicitly.
   fieldMode=(fieldMode+1)%(FIELD_MODES.length+1);
+  if(fieldMode>=FIELD_MODES.length) fieldMode=-1;
   if(fieldOverlay){ scene.remove(fieldOverlay); fieldOverlay.traverse(o=>{ if(o.isMesh) o.geometry.dispose(); }); fieldOverlay=null; }
   if(fieldMode>=0) buildFieldOverlay();
   msg(fieldMode>=0? ('Field overlay: '+FIELD_MODES[fieldMode]) : 'Field overlay off');

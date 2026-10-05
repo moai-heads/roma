@@ -113,10 +113,12 @@ function simTick(dt){
   for(const b of blds){
     if(!VICE.includes(b.type)||b.type==='lararium') continue;
     const s2=b.sinLocal||0;
-    const gate = b.type==='opiumden' ? 0.62 : b.type==='alehouse'?0.55:0.75;
+    const gate = b.type==='opiumden' ? 0.88 : b.type==='alehouse'?0.55:0.75;
     if(s2>gate){
       b.evoT=(b.evoT||0)+dt;
-      if(b.evoT>45){
+      // the Lararium is a LATE payoff: a district has to wallow in near-maximal
+      // sin for a full 4 minutes of sim time before it builds its own shrine.
+      if(b.evoT>240 && b.type==='opiumden'){
         b.evoT=0;
         // a district that has wallowed long enough builds its own shrine: the sin
         // finally tips over into a Lararium, which projects it back down hard

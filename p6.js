@@ -1,12 +1,15 @@
 // ---------- SCENE / CAMERA ----------
 let renderer, scene, camera;
-const cam = {dist:46, yaw:0.9, pitch:0.85, tx:0, tz:6};
+// fixed isometric camera: no orbit, no roll, classic 45/45 city-builder view
+const ISO_YAW = Math.PI*0.25;
+const ISO_PITCH = Math.atan(1/Math.SQRT2);   // true isometric 35.264 deg
+const cam = {dist:46, yaw:ISO_YAW, pitch:ISO_PITCH, tx:0, tz:0};
 function init3D(){
   scene=new THREE.Scene();
   scene.background=new THREE.Color(0x9fc4dd);
   scene.fog=new THREE.Fog(0x9fc4dd, 90, 260);
-  camera=new THREE.PerspectiveCamera(50, innerWidth/innerHeight, 0.5, 900);
-  renderer=new THREE.WebGLRenderer({antialias:true});
+  camera=new THREE.PerspectiveCamera(30, innerWidth/innerHeight, 1, 900);  // narrow fov = near-orthographic
+  renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});
   renderer.setSize(innerWidth,innerHeight);
   renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
   renderer.setPixelRatio(Math.min(devicePixelRatio,2));
@@ -23,11 +26,44 @@ function init3D(){
   window.addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); });
 }
 function updateCam(dt){
-  const cy=cam.dist*Math.cos(cam.pitch)*Math.sin(cam.yaw);
-  const cx=cam.tx+cam.dist*Math.cos(cam.pitch)*Math.cos(cam.yaw);
-  const cz=cam.tz+cam.dist*Math.sin(cam.pitch);
-  camera.position.lerp(new THREE.Vector3(cx,Math.max(6,cy),cz), 1-Math.pow(0.001,dt));
+  // classic iso: camera sits back along the fixed diagonal, screen-space pans stay aligned
+  const d=cam.dist;
+  const cx=cam.tx + d*Math.cos(cam.pitch)*Math.cos(cam.yaw);
+  const cy=d*Math.sin(cam.pitch);
+  const cz=cam.tz + d*Math.cos(cam.pitch)*Math.sin(cam.yaw);
+  camera.position.set(cx,cy,cz);
+  camera.up.set(0,1,0);
   camera.lookAt(cam.tx,0,cam.tz);
+  cam.cy=cy;
+}
+
+// screen-space pan: map a 2D drag delta onto the ground plane along the camera's own
+// screen axes. The basis is derived from the camera, not guessed:
+//   zAxis = eye-target direction, xAxis = cross(up, zAxis) = the camera's screen-right.
+// For an isometric camera those are the only two vectors that make drag follow the mouse.
+function camBasis(){
+  const zx=Math.cos(cam.yaw), zz=Math.sin(cam.yaw);   // camera sits at target + d*(zx,.,zz)
+  return { rx:zz, rz:-zx,          // screen-right projected on the ground
+           ux:-zx, uz:-zz };       // screen-up    projected on the ground
+}
+// dx,dy in screen pixels with y pointing DOWN (i.e. raw mouse deltas). Dragging moves the
+// world with the pointer, so the target moves against it.
+function panScreen(dx,dy){
+  const {rx,rz,ux,uz}=camBasis();
+  const k=cam.dist*0.0013;
+  cam.tx -= (rx*dx + ux*dy)*k;
+  cam.tz -= (rz*dx + uz*dy)*k;
+}
+// One key tap, in world units. Deliberately the SAME convention as panScreen -- dx/dy are
+// screen-space, y pointing DOWN, and both move the world in that direction. Having two
+// functions with opposite sign conventions is exactly how the axes ended up crossed.
+// So "W" is panKey(0,+1): the view pans up, which slides the world down the screen,
+// identical to dragging downward.
+function panKey(dx,dy){
+  const {rx,rz,ux,uz}=camBasis();
+  const s=Math.max(1.8, cam.dist*0.030);   // scale with zoom so it stays usable far out
+  cam.tx -= (rx*dx + ux*dy)*s;
+  cam.tz -= (rz*dx + uz*dy)*s;
 }
 
 // ---------- raycast ----------
@@ -53,11 +89,24 @@ function pickBuilding(ev){
 }
 
 // ---------- selection + ghost ----------
-let tool='road', sel=null, demolishMode=false, showPaths=true, pathGroup=null, chainOpen=false;
-function setTool(t){ tool=t; demolishMode=false; refreshBar(); }
-function setDemolish(){ demolishMode=!demolishMode; refreshBar(); }
+// tool === null is the neutral state: no build mode, left-click just selects/inspects.
+let tool=null, sel=null, demolishMode=false, showPaths=true, pathGroup=null, chainOpen=false;
+function setTool(t){
+  // clicking the card you already have selected puts you back on neutral
+  tool = (t===tool && t!=='inspect') ? null : t;
+  if(tool==='inspect') tool='inspect';
+  demolishMode=false; refreshBar(); updateGhost();
+}
+// Esc / right-click: back to neutral, nothing armed.
+function setNeutral(){ tool=null; demolishMode=false; refreshBar(); updateGhost(); }
+function setDemolish(){ demolishMode=!demolishMode; if(demolishMode) tool=null; refreshBar(); updateGhost(); }
 function updateGhost(){
-  if(ghostMesh){ bldGroup.remove(ghostMesh); ghostMesh.geometry.dispose(); ghostMesh=null; }
+  // ghostMesh is a Group, not a Mesh -- it has no .geometry of its own, so dispose the
+  // whole subtree (and only free the shared materials, which the ghost cloned in place).
+  if(ghostMesh){ bldGroup.remove(ghostMesh); ghostMesh.traverse(o=>{ if(o.isMesh && o.geometry) o.geometry.dispose(); }); ghostMesh=null; }
+  const gi=document.getElementById('ghostinfo');
+  if(gi && !gi.textContent) gi.style.display='none';
+  if(!tool || !BTYPES[tool]) return;
   if(!onTile) return;
   if(tool==='inspect') return;
   const err=siteProblem(tool,mouseTile.x,mouseTile.z);
@@ -67,14 +116,14 @@ function updateGhost(){
   const mat=new THREE.MeshStandardMaterial({color: err?0xff4444:0x66ff99, transparent:true, opacity:0.35, depthWrite:false});
   const base=new THREE.Mesh(new THREE.BoxGeometry(w,0.12,h),mat); g.add(base);
   if(tool!=='road'){
-    const body=tool==='house'? houseMesh(1) : buildingMesh({type:tool,x:mouseTile.x,z:mouseTile.z});
+    const body=tool==='house'? houseMesh(1) : buildingMesh({type:(tool==='bridge'?'bridge':tool),x:mouseTile.x,z:mouseTile.z});
     body.traverse(o=>{ if(o.isMesh){ o.material=mat; o.castShadow=false; o.receiveShadow=false; } });
     g.add(body);
   }
   const [wx,wz]=worldOf(mouseTile.x,mouseTile.z);
   g.position.set(wx+(t.w-1)*TILE/2, mouseTile.y+0.1, wz+(t.h-1)*TILE/2);
   g.renderOrder=5; bldGroup.add(g); ghostMesh=g;
-  const gi=document.getElementById('ghostinfo'); if(gi) gi.textContent = err? ('\u2716 '+err) : (BTYPES[tool].chain||'');
+  if(gi){ gi.textContent = err? ('\u2716 '+err) : (BTYPES[tool].chain||''); gi.style.display='block'; }
 }
 function refreshSel(){
   const p=document.getElementById('selbox');

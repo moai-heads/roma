@@ -4,6 +4,7 @@ function canPlace(type,x,z){
   if(type==='road'){
     if(!inb(x,z)) return 'out';
     if(cells[idx(x,z)]===T_BLD) return 'building';
+    if(cells[idx(x,z)]===T_WATER) return 'water';
     return null;
   }
   if(!inb(x,z)) return 'out';
@@ -14,6 +15,25 @@ function canPlace(type,x,z){
     if(c===T_BLD) return 'building';
     if(c===T_ROCK) return 'rock';
   }
+  return null;
+}
+
+// Why a tile cannot take this building right now, for the hover ghost.
+// (updateGhost has called this since it was written but the function never existed --
+// every mousemove threw a ReferenceError, so the ghost and the red 'cannot build here'
+// message were silently dead.)
+const SITE_WHY={out:'off the map', water:'needs a bridge', building:'already built on',
+                rock:'clear the rock first'};
+function siteProblem(type,x,z){
+  if(!BTYPES[type]) return null;
+  if(type==='bridge'){
+    if(!inb(x,z)) return 'out';
+    if(cells[idx(x,z)]!==T_WATER) return 'a bridge must span the river';
+    return null;
+  }
+  const err=canPlace(type,x,z);
+  if(err) return SITE_WHY[err]||err;
+  if(G.money<BTYPES[type].cost) return 'not enough denarii';
   return null;
 }
 
